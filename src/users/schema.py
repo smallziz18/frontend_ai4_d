@@ -17,6 +17,7 @@ class StatutUtilisateur(str, Enum):
 class UtilisateurBase(BaseModel):
     nom: str
     prenom: str
+    username: str
     email: EmailStr
     motDePasseHash: str
     statut: StatutUtilisateur
@@ -47,6 +48,7 @@ class UtilisateurRead(BaseModel):
     id: UUID
     nom: str
     prenom: str
+    username: str
     email: EmailStr
     statut: StatutUtilisateur
     created_at: datetime
@@ -69,3 +71,7 @@ class EtudiantRead(UtilisateurRead):
     objectifs_apprentissage: Optional[str]
     motivation: Optional[str]
     niveau_energie: int
+
+class   UserLogin(BaseModel):
+    email: EmailStr
+    password: str

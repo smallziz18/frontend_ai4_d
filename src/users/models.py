@@ -14,13 +14,14 @@ class StatutUtilisateur(str, Enum):
 
 
 class UtilisateurBase(SQLModel):
-    nom: str
-    prenom: str
-    email: str = Field(
-        sa_column=Column(
+    nom: str = Field(nullable=False)
+    prenom: str = Field(nullable=False)
+    username:  str= Field(
             unique=True,
-        )
+            nullable=False,
     )
+
+    email: str = Field(unique=True, nullable=False)
     motDePasseHash: str
     statut: StatutUtilisateur
     created_at: datetime = Field(
@@ -33,6 +34,12 @@ class UtilisateurBase(SQLModel):
         sa_column=Column(
             pg.TIMESTAMP,
             default=datetime.now
+        )
+    )
+    is_verified: bool = Field(
+        sa_column=Column(
+            pg.BOOLEAN,
+            default=False
         )
     )
 

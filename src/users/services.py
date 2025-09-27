@@ -1,6 +1,7 @@
 from datetime import datetime
 from uuid import UUID
-from typing import List, Union, Any, Coroutine, Sequence
+from typing import  Union
+from .utils import generate_password_hash,verify_password_hash
 
 from sqlmodel import select,desc
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,6 +24,13 @@ class UserService:
         stmt = select(Utilisateur).where(Utilisateur.id == user_id)
         result = await session.execute(stmt)
         return result.scalar_one_or_none()
+    @staticmethod
+    async def user_exists(user_id: UUID, session: AsyncSession) -> bool:
+        stmt = select(Utilisateur).where(Utilisateur.id == user_id)
+        result = await session.execute(stmt)
+        if result:
+            return True
+        return False
 
     @staticmethod
     async def create_user(
@@ -32,8 +40,9 @@ class UserService:
         utilisateur = Utilisateur(
             nom=data.nom,
             prenom=data.prenom,
+            username=data.username,
             email=data.email,
-            motDePasseHash=data.motDePasseHash,
+            motDePasseHash=generate_password_hash(data.motDePasseHash),
             statut=data.statut,
             created_at=datetime.now(),
             updated_at=datetime.now()
@@ -72,6 +81,16 @@ class UserService:
         await session.refresh(utilisateur)
 
         return utilisateur
+
+    @staticmethod
+    async def get_user_by_email(email: str, session: AsyncSession):
+        stmt = select(Utilisateur).where(Utilisateur.email == email)
+        result = await session.scalars(stmt)
+        user = result.first()  # user est maintenant un objet Utilisateur
+        return user
+
+
+
 
 
 
