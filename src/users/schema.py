@@ -5,6 +5,8 @@ from datetime import datetime
 from pydantic import BaseModel, EmailStr, Field
 
 
+
+
 # -------- ENUM --------
 
 class StatutUtilisateur(str, Enum):
@@ -72,6 +74,10 @@ class EtudiantRead(UtilisateurRead):
     motivation: Optional[str]
     niveau_energie: int
 
+
 class   UserLogin(BaseModel):
     email: EmailStr
     password: str
+
+
+

@@ -20,7 +20,7 @@ from src.users.services import UserService
 from src.users.utils import verify_password_hash
 from src.users.dependencies import AccessTokenBearer
 from .dependencies import RefreshTokenBearer
-from .dependencies import get_current_use,RoleChecker
+from .dependencies import get_current_user,RoleChecker
 
 # Logger
 logger = logging.getLogger("user_router")
@@ -132,8 +132,8 @@ async def get_new_access_token(token_detail: dict = Depends(RefreshTokenBearer()
             return JSONResponse(content={"token": new_access_token})
     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired refresh token")
 
-@user_router.get("/me")
-async def get_current_user(user_details: dict = Depends(get_current_use)):
+@user_router.get("/me",response_model=UtilisateurRead)
+async def get_current_user(user_details: dict = Depends(get_current_user)):
     return user_details
 @user_router.get("/logout")
 async def logout(token_detail: dict = Depends(AccessTokenBearer())):

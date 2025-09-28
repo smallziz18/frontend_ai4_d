@@ -64,7 +64,7 @@ class RefreshTokenBearer(AccessToken):
                 detail="Please provide a refresh token"
             )
 
-async def get_current_use(session: AsyncSession = Depends(get_session),token_details: dict = Depends(AccessTokenBearer(),)):
+async def get_current_user(session: AsyncSession = Depends(get_session),token_details: dict = Depends(AccessTokenBearer(),)):
     user_email = token_details["user"]["email"]
     user = await users_service.get_user_by_email(user_email, session=session)
     return user
@@ -74,7 +74,7 @@ class RoleChecker:
     def __init__(self,allowed_roles: List[str]):
         self.allowed_roles = allowed_roles
 
-    async def __call__(self,current_user: Utilisateur = Depends(get_current_use)) -> Any:
+    async def __call__(self,current_user: Utilisateur = Depends(get_current_user)) -> Any:
         if current_user.status in self.allowed_roles:
             return True
         raise HTTPException(

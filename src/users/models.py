@@ -31,10 +31,10 @@ class UtilisateurBase(SQLModel):
     )
 
     created_at: datetime = Field(
-        sa_column=Column(pg.TIMESTAMP, default=datetime.utcnow)
+        sa_column=Column(pg.TIMESTAMP, default=datetime.now)
     )
     updated_at: datetime = Field(
-        sa_column=Column(pg.TIMESTAMP, default=datetime.utcnow, onupdate=datetime.utcnow)
+        sa_column=Column(pg.TIMESTAMP, default=datetime.now, onupdate=datetime.now)
     )
     is_verified: bool = Field(
         sa_column=Column(pg.BOOLEAN, default=False)
