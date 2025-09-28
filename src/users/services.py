@@ -1,14 +1,13 @@
 from datetime import datetime
 from uuid import UUID
 from typing import  Union
-from .utils import generate_password_hash,verify_password_hash
+from .utils import generate_password_hash
 
 from sqlmodel import select,desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.users.models import Utilisateur, Professeur, Etudiant
-from src.users.schema import UtilisateurRead, EtudiantRead, ProfesseurCreate, ProfesseurRead, EtudiantCreate, \
-    UtilisateurBase, StatutUtilisateur
+from src.users.schema import  ProfesseurCreate,  EtudiantCreate,StatutUtilisateur
 
 
 class UserService:
@@ -43,7 +42,7 @@ class UserService:
             username=data.username,
             email=data.email,
             motDePasseHash=generate_password_hash(data.motDePasseHash),
-            statut=data.statut,
+            status=data.status,
             created_at=datetime.now(),
             updated_at=datetime.now()
         )
@@ -52,7 +51,7 @@ class UserService:
         # Flush envoie INSERT en DB et récupère utilisateur.id
         await session.flush()
 
-        if data.statut == StatutUtilisateur.PROFESSEUR:
+        if data.status == StatutUtilisateur.PROFESSEUR:
             professeur = Professeur(
                 id=utilisateur.id,  # clé étrangère qui pointe vers Utilisateur
                 niveau_experience=data.niveau_experience,
@@ -62,7 +61,7 @@ class UserService:
             )
             session.add(professeur)
 
-        elif data.statut == StatutUtilisateur.ETUDIANT:
+        elif data.status == StatutUtilisateur.ETUDIANT:
             etudiant = Etudiant(
                 id=utilisateur.id,  # clé étrangère qui pointe vers Utilisateur
                 niveau_technique=data.niveau_technique,

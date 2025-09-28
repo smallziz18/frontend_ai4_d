@@ -20,13 +20,13 @@ class UtilisateurBase(BaseModel):
     username: str
     email: EmailStr
     motDePasseHash: str
-    statut: StatutUtilisateur
+    status: StatutUtilisateur
 
 
 # -------- SCHÉMAS DE CRÉATION --------
 
 class ProfesseurCreate(UtilisateurBase):
-    statut: StatutUtilisateur = StatutUtilisateur.PROFESSEUR
+    status: StatutUtilisateur = StatutUtilisateur.PROFESSEUR
     niveau_experience: int = Field(ge=0, le=20)
     specialites: List[str]
     motivation_principale: Optional[str]
@@ -34,7 +34,7 @@ class ProfesseurCreate(UtilisateurBase):
 
 
 class EtudiantCreate(UtilisateurBase):
-    statut: StatutUtilisateur = StatutUtilisateur.ETUDIANT
+    status: StatutUtilisateur = StatutUtilisateur.ETUDIANT
     niveau_technique: int = Field(ge=1, le=10)
     competences: List[str]
     objectifs_apprentissage: Optional[str]
@@ -50,7 +50,7 @@ class UtilisateurRead(BaseModel):
     prenom: str
     username: str
     email: EmailStr
-    statut: StatutUtilisateur
+    status: StatutUtilisateur
     created_at: datetime
     updated_at: datetime
 

@@ -11,37 +11,35 @@ import sqlalchemy.dialects.postgresql as pg
 class StatutUtilisateur(str, Enum):
     ETUDIANT = "Etudiant"
     PROFESSEUR = "Professeur"
+    Administrateur = "Administrateur"
 
 
 class UtilisateurBase(SQLModel):
     nom: str = Field(nullable=False)
     prenom: str = Field(nullable=False)
-    username:  str= Field(
-            unique=True,
-            nullable=False,
-    )
-
+    username: str = Field(unique=True, nullable=False)
     email: str = Field(unique=True, nullable=False)
     motDePasseHash: str
-    statut: StatutUtilisateur
-    created_at: datetime = Field(
+
+    # Correction: nom de colonne explicite + type Enum PostgreSQL
+    status: StatutUtilisateur = Field(
         sa_column=Column(
-            pg.TIMESTAMP,
-            default=datetime.now
+            "status",
+            pg.ENUM(StatutUtilisateur, name="statututilisateur", create_type=True),
+            nullable=False
         )
+    )
+
+    created_at: datetime = Field(
+        sa_column=Column(pg.TIMESTAMP, default=datetime.utcnow)
     )
     updated_at: datetime = Field(
-        sa_column=Column(
-            pg.TIMESTAMP,
-            default=datetime.now
-        )
+        sa_column=Column(pg.TIMESTAMP, default=datetime.utcnow, onupdate=datetime.utcnow)
     )
     is_verified: bool = Field(
-        sa_column=Column(
-            pg.BOOLEAN,
-            default=False
-        )
+        sa_column=Column(pg.BOOLEAN, default=False)
     )
+
 
 
 
