@@ -1,0 +1,77 @@
+<script setup lang="ts">
+
+</script>
+
+<template>
+  <body class="bg-background-light dark:bg-background-dark font-display">
+    <div class="relative flex min-h-screen w-full flex-col items-center justify-center bg-background-light dark:bg-background-dark group/design-root overflow-x-hidden">
+      <div class="layout-container flex h-full grow flex-col w-full max-w-md px-4 sm:px-6 lg:px-8">
+        <div class="flex flex-col items-center justify-center py-12">
+          <div class="flex flex-col items-center mb-8">
+            <svg
+              class="h-10 w-10 text-primary"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              viewbox="0 0 24 24"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+            <p class="mt-2 text-xl font-bold text-slate-800 dark:text-slate-200">
+              EduAI
+            </p>
+          </div>
+          <div class="w-full">
+            <div class="flex flex-wrap justify-center gap-3 p-4">
+              <p class="text-slate-900 dark:text-slate-50 text-3xl sm:text-4xl font-black leading-tight tracking-[-0.033em] text-center">
+                Welcome Back
+              </p>
+            </div>
+            <div class="flex w-full flex-wrap items-end gap-4 px-4 py-3">
+              <label class="flex flex-col min-w-40 flex-1">
+                <p class="text-slate-800 dark:text-slate-200 text-base font-medium leading-normal pb-2">Email</p>
+                <input
+                  class="form-input flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-lg text-slate-900 dark:text-slate-50 focus:outline-0 focus:ring-2 focus:ring-primary/50 border-none bg-slate-200/50 dark:bg-slate-800/50 h-14 placeholder:text-slate-500 dark:placeholder:text-slate-400 p-4 text-base font-normal leading-normal"
+                  placeholder="Enter your email"
+                  value=""
+                >
+              </label>
+            </div>
+            <div class="flex w-full flex-wrap items-end gap-4 px-4 py-3">
+              <label class="flex flex-col min-w-40 flex-1">
+                <p class="text-slate-800 dark:text-slate-200 text-base font-medium leading-normal pb-2">Password</p>
+                <div class="flex w-full flex-1 items-stretch rounded-lg">
+                  <input
+                    class="form-input flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-lg text-slate-900 dark:text-slate-50 focus:outline-0 focus:ring-2 focus:ring-primary/50 border-none bg-slate-200/50 dark:bg-slate-800/50 h-14 placeholder:text-slate-500 dark:placeholder:text-slate-400 p-4 rounded-r-none border-r-0 pr-2 text-base font-normal leading-normal"
+                    placeholder="Enter your password"
+                    type="password"
+                    value=""
+                  >
+
+                </div>
+              </label>
+            </div>
+            <p class="text-primary text-sm font-medium leading-normal pb-3 pt-1 px-4 underline cursor-pointer text-right">
+              Forgot Password?
+            </p>
+            <div class="flex px-4 py-3 justify-center mt-4">
+              <button class="flex min-w-[84px] w-full cursor-pointer items-center justify-center overflow-hidden rounded-lg h-12 px-5 bg-primary text-slate-50 text-base font-bold leading-normal tracking-[0.015em] hover:bg-primary/90 transition-colors">
+                <span class="truncate">Log In</span>
+              </button>
+            </div>
+            <div class="flex justify-center items-center px-4 py-3">
+              <p class="text-slate-600 dark:text-slate-400 text-sm font-normal">
+                Don't have an account? <a class="font-medium text-primary underline" href="#">Sign Up</a>
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</template>
