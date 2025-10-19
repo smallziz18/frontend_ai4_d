@@ -22,9 +22,9 @@ const isDark = computed({
       <NuxtLink to="/login" class="btn btn-outline btn-primary mr-2">
         Log in
       </NuxtLink>
-      <button class="btn btn-outline btn-info mr-2">
+      <NuxtLink to="/sign-up" class="btn btn-outline btn-info mr-2">
         Sign up
-      </button>
+      </NuxtLink>
     </div>
     <div class=" flex-none">
       <label class="flex cursor-pointer gap-2">

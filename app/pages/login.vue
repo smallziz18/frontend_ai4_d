@@ -4,24 +4,11 @@
 
 <template>
   <body class="bg-background-light dark:bg-background-dark font-display">
-    <div class="relative flex min-h-screen w-full flex-col items-center justify-center bg-background-light dark:bg-background-dark group/design-root overflow-x-hidden">
+    <form class="relative flex min-h-screen w-full flex-col items-center justify-center bg-background-light dark:bg-background-dark group/design-root overflow-x-hidden">
       <div class="layout-container flex h-full grow flex-col w-full max-w-md px-4 sm:px-6 lg:px-8">
         <div class="flex flex-col items-center justify-center py-12">
           <div class="flex flex-col items-center mb-8">
-            <svg
-              class="h-10 w-10 text-primary"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.5"
-              viewbox="0 0 24 24"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path
-                d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-            </svg>
+            <Icon name="tabler:book" size="48" />
             <p class="mt-2 text-xl font-bold text-slate-800 dark:text-slate-200">
               EduAI
             </p>
@@ -72,6 +59,6 @@
           </div>
         </div>
       </div>
-    </div>
+    </form>
   </body>
 </template>

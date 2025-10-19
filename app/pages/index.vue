@@ -6,7 +6,7 @@
     <div class="hero bg-base-200 mt-5">
       <div class="hero-content flex-col lg:flex-row-reverse">
         <img
-          src="https://img.daisyui.com/images/stock/photo-1635805737707-575885ab0820.webp"
+          src="/img/360_F_559871209_pbXlOVArUal3mk6Ce60JuP13kmuIRCth.jpg"
           class="max-w-sm rounded-lg shadow-2xl"
           alt="null"
         >
