@@ -1,0 +1,5 @@
+streamlit
+requests
+python-dateutil
+charset-normalizer>=3.0
+watchdog; sys_platform != 'win32'
