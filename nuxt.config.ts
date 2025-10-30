@@ -8,7 +8,7 @@ export default defineNuxtConfig({
 
   runtimeConfig: {
     public: {
-      apiBase: env.FASAPI_URL || "http://127.0.0.1:8000",
+      apiBase: env.FAST_API_URL || "http://127.0.0.1:8000",
     },
   },
 

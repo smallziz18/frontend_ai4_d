@@ -1,10 +1,52 @@
 <script setup lang="ts">
+import { useAuth } from "~/data/use-auth";
 
+const { login } = useAuth();
+const route = useRoute();
+
+const email = ref("");
+const password = ref("");
+const error = ref("");
+const loading = ref(false);
+const successMessage = ref("");
+
+// Vérifier si l'utilisateur vient de s'inscrire ou de vérifier son email
+onMounted(() => {
+  if (route.query.registered === "true") {
+    successMessage.value = "Inscription réussie ! Vérifiez votre email pour activer votre compte.";
+  }
+  else if (route.query.verified === "true") {
+    successMessage.value = "Email vérifié avec succès ! Vous pouvez maintenant vous connecter.";
+  }
+});
+
+async function handleLogin() {
+  error.value = "";
+  successMessage.value = "";
+  loading.value = true;
+
+  try {
+    await login(email.value, password.value);
+    await navigateTo("/dashboard");
+  }
+  catch (e: any) {
+    // Afficher le message d'erreur du backend (ex: compte non vérifié)
+    error.value = e.message || "Identifiants incorrects";
+
+    // Si le compte n'est pas vérifié, proposer de renvoyer l'email
+    if (error.value.includes("vérifié") || error.value.includes("verified")) {
+      error.value += " - Vérifiez votre email ou renvoyez un nouveau lien.";
+    }
+  }
+  finally {
+    loading.value = false;
+  }
+}
 </script>
 
 <template>
   <body class="bg-background-light dark:bg-background-dark font-display">
-    <form class="relative flex min-h-screen w-full flex-col items-center justify-center bg-background-light dark:bg-background-dark group/design-root overflow-x-hidden">
+    <form class="relative flex min-h-screen w-full flex-col items-center justify-center bg-background-light dark:bg-background-dark group/design-root overflow-x-hidden" @submit.prevent="handleLogin">
       <div class="layout-container flex h-full grow flex-col w-full max-w-md px-4 sm:px-6 lg:px-8">
         <div class="flex flex-col items-center justify-center py-12">
           <div class="flex flex-col items-center mb-8">
@@ -19,13 +61,24 @@
                 Welcome Back
               </p>
             </div>
+
+            <div v-if="successMessage" class="mx-4 mb-4 p-3 rounded-lg bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 text-sm">
+              {{ successMessage }}
+            </div>
+
+            <div v-if="error" class="mx-4 mb-4 p-3 rounded-lg bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 text-sm">
+              {{ error }}
+            </div>
+
             <div class="flex w-full flex-wrap items-end gap-4 px-4 py-3">
               <label class="flex flex-col min-w-40 flex-1">
                 <p class="text-slate-800 dark:text-slate-200 text-base font-medium leading-normal pb-2">Email</p>
                 <input
+                  v-model="email"
+                  type="email"
+                  required
                   class="form-input flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-lg text-slate-900 dark:text-slate-50 focus:outline-0 focus:ring-2 focus:ring-primary/50 border-none bg-slate-200/50 dark:bg-slate-800/50 h-14 placeholder:text-slate-500 dark:placeholder:text-slate-400 p-4 text-base font-normal leading-normal"
                   placeholder="Enter your email"
-                  value=""
                 >
               </label>
             </div>
@@ -34,12 +87,12 @@
                 <p class="text-slate-800 dark:text-slate-200 text-base font-medium leading-normal pb-2">Password</p>
                 <div class="flex w-full flex-1 items-stretch rounded-lg">
                   <input
-                    class="form-input flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-lg text-slate-900 dark:text-slate-50 focus:outline-0 focus:ring-2 focus:ring-primary/50 border-none bg-slate-200/50 dark:bg-slate-800/50 h-14 placeholder:text-slate-500 dark:placeholder:text-slate-400 p-4 rounded-r-none border-r-0 pr-2 text-base font-normal leading-normal"
-                    placeholder="Enter your password"
+                    v-model="password"
                     type="password"
-                    value=""
+                    required
+                    class="form-input flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-lg text-slate-900 dark:text-slate-50 focus:outline-0 focus:ring-2 focus:ring-primary/50 border-none bg-slate-200/50 dark:bg-slate-800/50 h-14 placeholder:text-slate-500 dark:placeholder:text-slate-400 p-4 text-base font-normal leading-normal"
+                    placeholder="Enter your password"
                   >
-
                 </div>
               </label>
             </div>
@@ -47,13 +100,19 @@
               Forgot Password?
             </p>
             <div class="flex px-4 py-3 justify-center mt-4">
-              <button class="flex min-w-[84px] w-full cursor-pointer items-center justify-center overflow-hidden rounded-lg h-12 px-5 bg-primary text-slate-50 text-base font-bold leading-normal tracking-[0.015em] hover:bg-primary/90 transition-colors">
-                <span class="truncate">Log In</span>
+              <button
+                type="submit"
+                :disabled="loading"
+                class="flex min-w-[84px] w-full cursor-pointer items-center justify-center overflow-hidden rounded-lg h-12 px-5 bg-primary text-slate-50 text-base font-bold leading-normal tracking-[0.015em] hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <span class="truncate">{{ loading ? 'Connexion...' : 'Log In' }}</span>
               </button>
             </div>
             <div class="flex justify-center items-center px-4 py-3">
               <p class="text-slate-600 dark:text-slate-400 text-sm font-normal">
-                Don't have an account? <a class="font-medium text-primary underline" href="#">Sign Up</a>
+                Don't have an account? <NuxtLink to="/signup" class="font-medium text-primary underline">
+                  Sign Up
+                </NuxtLink>
               </p>
             </div>
           </div>

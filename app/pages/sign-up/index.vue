@@ -1,14 +1,78 @@
 <script setup lang="ts">
+import { useSignup } from "~~/composables/use-signup";
 import { ref } from "vue";
 
-const userType = ref<"student" | "professor">("student");
+const { setBaseData } = useSignup();
+const router = useRouter();
 
-function handleNext() {
-  if (userType.value === "student") {
-    navigateTo("/sign-up/etudiants");
+const userType = ref<"student" | "professor">("student");
+const nom = ref("");
+const prenom = ref("");
+const username = ref("");
+const email = ref("");
+const password = ref("");
+const confirmPassword = ref("");
+const error = ref("");
+const showPassword = ref(false);
+const showConfirmPassword = ref(false);
+
+async function handleNext() {
+  error.value = "";
+
+  console.log("Bouton Next cliqué");
+  console.log("Valeurs du formulaire:", { nom: nom.value, prenom: prenom.value, username: username.value, email: email.value });
+
+  // Validation
+  if (!nom.value || !prenom.value || !username.value || !email.value || !password.value || !confirmPassword.value) {
+    error.value = "Tous les champs sont requis";
+    return;
   }
-  else {
-    navigateTo("/sign-up/professors");
+
+  if (password.value !== confirmPassword.value) {
+    error.value = "Les mots de passe ne correspondent pas";
+    return;
+  }
+
+  if (password.value.length < 8) {
+    error.value = "Le mot de passe doit contenir au moins 8 caractères";
+    return;
+  }
+
+  // Validation supplémentaire : vérifier complexité du mot de passe
+  const hasUpperCase = /[A-Z]/.test(password.value);
+  const hasLowerCase = /[a-z]/.test(password.value);
+  const hasNumber = /\d/.test(password.value);
+
+  if (!hasUpperCase || !hasLowerCase || !hasNumber) {
+    error.value = "Le mot de passe doit contenir au moins une majuscule, une minuscule et un chiffre";
+    return;
+  }
+
+  console.log("Validation réussie, stockage des données...");
+
+  // Stocker les données de base
+  setBaseData({
+    nom: nom.value,
+    prenom: prenom.value,
+    username: username.value,
+    email: email.value,
+    motDePasseHash: password.value,
+  });
+
+  console.log("Navigation vers:", userType.value === "student" ? "/sign-up/etudiants" : "/sign-up/professors");
+
+  // Navigation vers la page appropriée
+  try {
+    if (userType.value === "student") {
+      await router.push("/sign-up/etudiants");
+    }
+    else {
+      await router.push("/sign-up/professors");
+    }
+  }
+  catch (e) {
+    console.error("Erreur de navigation:", e);
+    error.value = "Erreur lors de la navigation";
   }
 }
 </script>
@@ -47,34 +111,47 @@ function handleNext() {
                   </div>
                 </div>
               </div>
+
+              <div v-if="error" class="mt-4 p-3 rounded-lg bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 text-sm">
+                {{ error }}
+              </div>
+
               <form class="mt-8 space-y-4" @submit.prevent="handleNext">
                 <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <fieldset class="flex flex-col">
-                    <legend class="fieldset-legend">
-                      What is your name?
-                    </legend>
+                  <div class="form-control">
+                    <label class="label">
+                      <span class="label-text">Nom</span>
+                    </label>
                     <input
+                      v-model="nom"
                       type="text"
-                      class="input"
+                      class="input input-bordered w-full"
+                      placeholder="Votre nom"
+                      required
                     >
-                  </fieldset>
-                  <fieldset class="flex flex-col">
-                    <legend class="fieldset-legend">
-                      What is your last name?
-                    </legend>
+                  </div>
+                  <div class="form-control">
+                    <label class="label">
+                      <span class="label-text">Prénom</span>
+                    </label>
                     <input
+                      v-model="prenom"
                       type="text"
-                      class="input"
+                      class="input input-bordered w-full"
+                      placeholder="Votre prénom"
+                      required
                     >
-                  </fieldset>
+                  </div>
                 </div>
-                <fieldset class="flex flex-col">
-                  <legend class="fieldset-legend">
-                    Username
-                  </legend>
+
+                <div class="form-control">
+                  <label class="label">
+                    <span class="label-text">Username</span>
+                  </label>
                   <input
+                    v-model="username"
                     type="text"
-                    class="input validator flex w-full min-w-0"
+                    class="input input-bordered w-full"
                     required
                     placeholder="Username"
                     pattern="[A-Za-z][A-Za-z0-9\-]*"
@@ -82,55 +159,103 @@ function handleNext() {
                     maxlength="30"
                     title="Only letters, numbers or dash"
                   >
-                  <p class="validator-hint">
-                    Must be 3 to 30 characters containing only letters, numbers or dash
-                  </p>
-                </fieldset>
-                <fieldset class="flex flex-col">
-                  <legend class="fieldset-legend">
-                    Email address
-                  </legend>
+                  <label class="label">
+                    <span class="label-text-alt">Must be 3 to 30 characters containing only letters, numbers or dash</span>
+                  </label>
+                </div>
+
+                <div class="form-control">
+                  <label class="label">
+                    <span class="label-text">Email address</span>
+                  </label>
                   <input
-                    class="input validator flex w-full"
+                    v-model="email"
+                    class="input input-bordered w-full"
                     type="email"
                     required
                     placeholder="mail@site.com"
                   >
-                  <div class="validator-hint">
-                    Enter valid email address
+                  <label class="label">
+                    <span class="label-text-alt">Enter valid email address</span>
+                  </label>
+                </div>
+
+                <div class="form-control">
+                  <label class="label">
+                    <span class="label-text">Password</span>
+                  </label>
+                  <div class="relative">
+                    <input
+                      v-model="password"
+                      :type="showPassword ? 'text' : 'password'"
+                      class="input input-bordered w-full pr-10"
+                      required
+                      placeholder="Password"
+                      minlength="8"
+                    >
+                    <button
+                      type="button"
+                      class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                      @click="showPassword = !showPassword"
+                    >
+                      <Icon
+                        v-if="showPassword"
+                        name="tabler:eye-off"
+                        size="20"
+                      />
+                      <Icon
+                        v-else
+                        name="tabler:eye"
+                        size="20"
+                      />
+                    </button>
                   </div>
-                </fieldset>
-                <fieldset class="flex flex-col">
-                  <legend class="fieldset-legend">
-                    Password
-                  </legend>
-                  <input
-                    type="password"
-                    class="input validator flex w-full"
-                    required
-                    placeholder="Password"
-                    minlength="8"
-                    pattern="(?=.*\d)(?=.*[a-z])(?=.*[A-Z]).{8,}"
-                    title="Must be more than 8 characters, including number, lowercase letter, uppercase letter"
-                  >
-                  <p class="validator-hint">
-                    Must be more than 8 characters, including at least one number, one lowercase letter, one uppercase letter
-                  </p>
-                </fieldset>
-                <fieldset class="flex flex-col">
-                  <legend class="fieldset-legend">
-                    Confirm Password
-                  </legend>
-                  <input
-                    type="password"
-                    class="input validator flex w-full"
-                    required
-                    placeholder="Confirm Password"
-                  >
-                </fieldset>
+                  <label class="label">
+                    <span class="label-text-alt">Must be more than 8 characters, including at least one number, one lowercase letter, one uppercase letter</span>
+                  </label>
+                </div>
+
+                <div class="form-control">
+                  <label class="label">
+                    <span class="label-text">Confirm Password</span>
+                  </label>
+                  <div class="relative">
+                    <input
+                      v-model="confirmPassword"
+                      :type="showConfirmPassword ? 'text' : 'password'"
+                      class="input input-bordered w-full pr-10"
+                      :class="{ 'input-error': confirmPassword && password !== confirmPassword }"
+                      required
+                      placeholder="Confirm Password"
+                    >
+                    <button
+                      type="button"
+                      class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                      @click="showConfirmPassword = !showConfirmPassword"
+                    >
+                      <Icon
+                        v-if="showConfirmPassword"
+                        name="tabler:eye-off"
+                        size="20"
+                      />
+                      <Icon
+                        v-else
+                        name="tabler:eye"
+                        size="20"
+                      />
+                    </button>
+                  </div>
+                  <label v-if="confirmPassword && password !== confirmPassword" class="label">
+                    <span class="label-text-alt text-error">Les mots de passe ne correspondent pas</span>
+                  </label>
+                  <label v-else-if="confirmPassword && password === confirmPassword" class="label">
+                    <span class="label-text-alt text-success">✓ Les mots de passe correspondent</span>
+                  </label>
+                </div>
+
                 <div class="form-control">
                   <label class="label cursor-pointer justify-start gap-4">
-                    <span class="label-text text-sm font-medium text-gray-700 dark:text-gray-300">I am a...</span>
+                    <span class="label-text text-sm font-medium">I am a...</span>
                     <input
                       v-model="userType"
                       type="checkbox"
@@ -143,14 +268,18 @@ function handleNext() {
                     </span>
                   </label>
                 </div>
+
                 <button
                   type="submit"
-                  class="flex w-full justify-center rounded-lg bg-primary py-3 px-4 text-sm font-semibold text-white shadow-sm hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 dark:ring-offset-background-dark"
+                  class="btn btn-primary w-full"
                 >
                   Next
                 </button>
+
                 <p class="text-center text-sm text-gray-600 dark:text-gray-400">
-                  Already have an account? <a class="font-medium text-primary hover:underline" href="#">Login</a>
+                  Already have an account? <NuxtLink to="/login" class="font-medium text-primary hover:underline">
+                    Login
+                  </NuxtLink>
                 </p>
               </form>
             </div>

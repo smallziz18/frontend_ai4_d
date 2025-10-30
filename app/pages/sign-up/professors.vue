@@ -1,22 +1,37 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { useSignup } from "~~/composables/use-signup";
+import { onMounted, ref } from "vue";
+
+const { signupProfesseur, baseData } = useSignup();
+const router = useRouter();
 
 const techLevel = ref(7);
-const energyLevel = ref(5);
-const skills = ref(["UI/UX Design", "Prototyping", "Figma"]);
-const newSkill = ref("");
-const learningObjectives = ref("");
-const motivation = ref("");
+const specialites = ref<string[]>([]);
+const newSpecialite = ref("");
+const niveauExperience = ref("");
+const motivationPrincipale = ref("");
+const error = ref("");
+const loading = ref(false);
 
-function addSkill() {
-  if (newSkill.value.trim() && !skills.value.includes(newSkill.value.trim())) {
-    skills.value.push(newSkill.value.trim());
-    newSkill.value = "";
+// Rediriger si pas de données de base
+onMounted(() => {
+  if (!baseData.value) {
+    router.push("/sign-up");
+  }
+});
+
+function addSpecialite() {
+  const trimmed = newSpecialite.value.trim();
+  if (trimmed && !specialites.value.includes(trimmed)) {
+    specialites.value.push(trimmed);
+    newSpecialite.value = "";
+    console.log("Spécialités actuelles:", specialites.value);
   }
 }
 
-function removeSkill(index: number) {
-  skills.value.splice(index, 1);
+function removeSpecialite(index: number) {
+  specialites.value.splice(index, 1);
+  console.log("Spécialités après suppression:", specialites.value);
 }
 
 function getTechLevelLabel(value: number) {
@@ -29,12 +44,38 @@ function getTechLevelLabel(value: number) {
   return "Expert";
 }
 
-function handleSubmit() {
-  navigateTo("/dashboard");
+async function handleSubmit() {
+  error.value = "";
+
+  if (!niveauExperience.value || !motivationPrincipale.value) {
+    error.value = "Veuillez remplir tous les champs requis";
+    return;
+  }
+
+  loading.value = true;
+
+  try {
+    await signupProfesseur({
+      niveau_experience: niveauExperience.value,
+      specialites: specialites.value,
+      motivation_principale: motivationPrincipale.value,
+      niveau_technologique: techLevel.value,
+    });
+
+    // Rediriger vers la page de vérification email après inscription réussie
+    await router.push(`/verify-email?email=${encodeURIComponent(baseData.value?.email || "")}`);
+  }
+  catch (e: any) {
+    error.value = e.message || "Erreur lors de l'inscription. Veuillez réessayer.";
+    console.error("Erreur complète:", e);
+  }
+  finally {
+    loading.value = false;
+  }
 }
 
 function handleBack() {
-  navigateTo("/sign-up");
+  router.push("/sign-up");
 }
 </script>
 
@@ -46,10 +87,10 @@ function handleBack() {
           <!-- Header -->
           <div>
             <h1 class="text-3xl md:text-4xl font-black text-gray-900 dark:text-white">
-              Tell Us About Yourself
+              Tell Us About Your Experience
             </h1>
             <p class="mt-2 text-base text-gray-600 dark:text-gray-400">
-              This will help our AI tailor the best experience for you.
+              This will help us understand your teaching profile.
             </p>
           </div>
 
@@ -63,12 +104,44 @@ function handleBack() {
             </div>
           </div>
 
+          <div v-if="error" class="p-3 rounded-lg bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 text-sm">
+            {{ error }}
+          </div>
+
           <!-- Form -->
           <form class="space-y-8" @submit.prevent="handleSubmit">
-            <!-- Niveau Technique -->
+            <!-- Niveau d'expérience -->
+            <div class="w-full">
+              <label class="block text-base font-medium text-gray-900 dark:text-white mb-2">
+                Niveau d'expérience
+              </label>
+              <select
+                v-model="niveauExperience"
+                class="select select-bordered w-full"
+                required
+              >
+                <option value="" disabled>
+                  Sélectionnez votre niveau d'expérience
+                </option>
+                <option value="Débutant">
+                  Débutant (moins de 2 ans)
+                </option>
+                <option value="Intermédiaire">
+                  Intermédiaire (2-5 ans)
+                </option>
+                <option value="Avancé">
+                  Avancé (5-10 ans)
+                </option>
+                <option value="Expert">
+                  Expert (plus de 10 ans)
+                </option>
+              </select>
+            </div>
+
+            <!-- Niveau Technologique -->
             <div class="w-full">
               <div class="flex justify-between items-center mb-2">
-                <span class="text-base font-medium text-gray-900 dark:text-white">Niveau Technique</span>
+                <span class="text-base font-medium text-gray-900 dark:text-white">Niveau Technologique</span>
                 <span class="text-sm text-gray-600 dark:text-gray-400">{{ techLevel }}/10 - {{ getTechLevelLabel(techLevel) }}</span>
               </div>
               <input
@@ -85,87 +158,56 @@ function handleBack() {
               </div>
             </div>
 
-            <!-- Compétences -->
+            <!-- Spécialités -->
             <div class="w-full">
               <label class="block text-base font-medium text-gray-900 dark:text-white mb-2">
-                Compétences
+                Spécialités
               </label>
               <div class="join w-full">
                 <input
-                  v-model="newSkill"
+                  v-model="newSpecialite"
                   type="text"
                   class="input input-bordered join-item flex-1"
-                  placeholder="Enter a skill and press Enter"
-                  @keyup.enter="addSkill"
+                  placeholder="Enter a specialty and press Enter"
+                  @keyup.enter.prevent="addSpecialite"
                 >
                 <button
                   type="button"
                   class="btn btn-primary join-item"
-                  @click="addSkill"
+                  @click="addSpecialite"
                 >
-                  <span class="material-symbols-outlined">add</span>
+                  <Icon name="tabler:plus" size="20" />
                 </button>
               </div>
-              <div v-if="skills.length > 0" class="flex gap-2 flex-wrap mt-3">
+              <div v-if="specialites.length > 0" class="flex gap-2 flex-wrap mt-3">
                 <div
-                  v-for="(skill, index) in skills"
+                  v-for="(specialite, index) in specialites"
                   :key="index"
                   class="badge badge-primary badge-lg gap-2"
                 >
-                  {{ skill }}
+                  {{ specialite }}
                   <button
                     type="button"
                     class="btn btn-ghost btn-xs btn-circle"
-                    @click="removeSkill(index)"
+                    @click="removeSpecialite(index)"
                   >
-                    <span class="material-symbols-outlined text-base">close</span>
+                    <Icon name="tabler:x" size="16" />
                   </button>
                 </div>
               </div>
             </div>
 
-            <!-- Objectifs d'apprentissage -->
+            <!-- Motivation principale -->
             <div class="w-full">
               <label class="block text-base font-medium text-gray-900 dark:text-white mb-2">
-                Objectifs d'apprentissage
+                Motivation principale
               </label>
               <textarea
-                v-model="learningObjectives"
+                v-model="motivationPrincipale"
                 class="textarea textarea-bordered w-full h-28"
-                placeholder="e.g., Master advanced prototyping techniques, improve my visual design skills..."
+                placeholder="What motivates you to teach? What do you hope to achieve with your students?"
+                required
               />
-            </div>
-
-            <!-- Motivation -->
-            <div class="w-full">
-              <label class="block text-base font-medium text-gray-900 dark:text-white mb-2">
-                Motivation
-              </label>
-              <textarea
-                v-model="motivation"
-                class="textarea textarea-bordered w-full h-28"
-                placeholder="What drives you to learn? What are you passionate about?"
-              />
-            </div>
-
-            <!-- Niveau d'énergie -->
-            <div class="w-full">
-              <div class="flex justify-between items-center mb-2">
-                <span class="text-base font-medium text-gray-900 dark:text-white">Niveau d'énergie</span>
-                <span class="text-sm text-gray-600 dark:text-gray-400">{{ energyLevel }}/10</span>
-              </div>
-              <input
-                v-model="energyLevel"
-                type="range"
-                min="1"
-                max="10"
-                class="range range-primary w-full"
-              >
-              <div class="w-full flex justify-between text-xs text-gray-500 dark:text-gray-400 px-2 mt-2">
-                <span>1</span>
-                <span>5</span>
-                <span>10</span>
-              </div>
             </div>
 
             <!-- Buttons -->
@@ -173,6 +215,7 @@ function handleBack() {
               <button
                 type="button"
                 class="btn btn-ghost"
+                :disabled="loading"
                 @click="handleBack"
               >
                 Back
@@ -180,8 +223,9 @@ function handleBack() {
               <button
                 type="submit"
                 class="btn btn-primary"
+                :disabled="loading"
               >
-                Create Account
+                {{ loading ? "Création en cours..." : "Create Account" }}
               </button>
             </div>
           </form>
