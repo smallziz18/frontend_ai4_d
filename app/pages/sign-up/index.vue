@@ -19,9 +19,6 @@ const showConfirmPassword = ref(false);
 async function handleNext() {
   error.value = "";
 
-  console.log("Bouton Next cliqué");
-  console.log("Valeurs du formulaire:", { nom: nom.value, prenom: prenom.value, username: username.value, email: email.value });
-
   // Validation
   if (!nom.value || !prenom.value || !username.value || !email.value || !password.value || !confirmPassword.value) {
     error.value = "Tous les champs sont requis";
@@ -48,8 +45,6 @@ async function handleNext() {
     return;
   }
 
-  console.log("Validation réussie, stockage des données...");
-
   // Stocker les données de base
   setBaseData({
     nom: nom.value,
@@ -58,8 +53,6 @@ async function handleNext() {
     email: email.value,
     motDePasseHash: password.value,
   });
-
-  console.log("Navigation vers:", userType.value === "student" ? "/sign-up/etudiants" : "/sign-up/professors");
 
   // Navigation vers la page appropriée
   try {
