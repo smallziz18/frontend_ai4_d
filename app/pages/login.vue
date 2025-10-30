@@ -110,7 +110,10 @@ async function handleLogin() {
             </div>
             <div class="flex justify-center items-center px-4 py-3">
               <p class="text-slate-600 dark:text-slate-400 text-sm font-normal">
-                Don't have an account? <NuxtLink to="/signup" class="font-medium text-primary underline">
+                Don't have an account? <NuxtLink
+                  to="/sign-up"
+                  class="font-medium text-primary underline"
+                >
                   Sign Up
                 </NuxtLink>
               </p>

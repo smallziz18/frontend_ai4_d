@@ -6,8 +6,7 @@ export type SignupBaseData = {
   motDePasseHash: string;
 };
 
-export type EtudiantSignupData = SignupBaseData & {
-  status: "StatutUtilisateur.ETUDIANT";
+export type EtudiantSpecificData = {
   niveau_technique: number;
   competences: string[];
   objectifs_apprentissage: string | null;
@@ -15,12 +14,19 @@ export type EtudiantSignupData = SignupBaseData & {
   niveau_energie: number;
 };
 
-export type ProfesseurSignupData = SignupBaseData & {
-  status: "StatutUtilisateur.PROFESSEUR";
+export type ProfesseurSpecificData = {
   niveau_experience: number;
   specialites: string[];
   motivation_principale: string | null;
   niveau_technologique: number;
+};
+
+export type EtudiantSignupData = SignupBaseData & EtudiantSpecificData & {
+  status: "Etudiant";
+};
+
+export type ProfesseurSignupData = SignupBaseData & ProfesseurSpecificData & {
+  status: "Professeur";
 };
 
 type SignupResponse = {
@@ -50,7 +56,7 @@ export function useSignup() {
     baseData.value = data;
   };
 
-  const signupEtudiant = async (etudiantData: Omit<EtudiantSignupData, keyof SignupBaseData>) => {
+  const signupEtudiant = async (etudiantData: EtudiantSpecificData) => {
     if (!baseData.value) {
       throw new Error("Données de base manquantes");
     }
@@ -58,12 +64,10 @@ export function useSignup() {
     const fullData: EtudiantSignupData = {
       ...baseData.value,
       ...etudiantData,
-      status: "StatutUtilisateur.ETUDIANT",
+      status: "Etudiant",
       objectifs_apprentissage: etudiantData.objectifs_apprentissage || null,
       motivation: etudiantData.motivation || null,
     };
-
-    console.log("Données envoyées au backend:", fullData);
 
     const { data, error } = await useFetch<SignupResponse>("http://127.0.0.1:8000/api/auth/v1/signup", {
       method: "POST",
@@ -72,8 +76,28 @@ export function useSignup() {
 
     if (error.value) {
       console.error("Erreur backend:", error.value);
-      const errorMessage = error.value.data?.detail || "Erreur lors de l'inscription";
-      throw new Error(errorMessage);
+
+      // Extraire le message d'erreur depuis différents formats possibles
+      let errorMessage = "Erreur lors de l'inscription";
+
+      if (error.value.data) {
+        if (typeof error.value.data === "string") {
+          errorMessage = error.value.data;
+        }
+        else if (error.value.data.message) {
+          errorMessage = error.value.data.message;
+        }
+        else if (error.value.data.detail) {
+          errorMessage = error.value.data.detail;
+        }
+      }
+      else if (error.value.message) {
+        errorMessage = error.value.message;
+      }
+
+      const err = new Error(errorMessage);
+      (err as any).statusCode = error.value.statusCode;
+      throw err;
     }
 
     // Nettoyer les données temporaires après inscription réussie
@@ -95,14 +119,12 @@ export function useSignup() {
     // Convertir le niveau d'expérience en nombre
     const fullData: ProfesseurSignupData = {
       ...baseData.value,
-      status: "StatutUtilisateur.PROFESSEUR",
+      status: "Professeur",
       niveau_experience: mapExperienceToNumber(professeurData.niveau_experience),
       specialites: professeurData.specialites,
       motivation_principale: professeurData.motivation_principale || null,
       niveau_technologique: professeurData.niveau_technologique,
     };
-
-    console.log("Données envoyées au backend:", fullData);
 
     const { data, error } = await useFetch<SignupResponse>("http://127.0.0.1:8000/api/auth/v1/signup", {
       method: "POST",
@@ -111,8 +133,28 @@ export function useSignup() {
 
     if (error.value) {
       console.error("Erreur backend:", error.value);
-      const errorMessage = error.value.data?.detail || "Erreur lors de l'inscription";
-      throw new Error(errorMessage);
+
+      // Extraire le message d'erreur depuis différents formats possibles
+      let errorMessage = "Erreur lors de l'inscription";
+
+      if (error.value.data) {
+        if (typeof error.value.data === "string") {
+          errorMessage = error.value.data;
+        }
+        else if (error.value.data.message) {
+          errorMessage = error.value.data.message;
+        }
+        else if (error.value.data.detail) {
+          errorMessage = error.value.data.detail;
+        }
+      }
+      else if (error.value.message) {
+        errorMessage = error.value.message;
+      }
+
+      const err = new Error(errorMessage);
+      (err as any).statusCode = error.value.statusCode;
+      throw err;
     }
 
     // Nettoyer les données temporaires après inscription réussie

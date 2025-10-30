@@ -1,13 +1,9 @@
-export default defineNuxtRouteMiddleware((to) => {
+export default defineNuxtRouteMiddleware((_to, _from) => {
   const accessToken = useCookie("access_token");
 
-  // Si l'utilisateur essaie d'accéder au dashboard sans être connecté
-  if (to.path === "/dashboard" && !accessToken.value) {
+  // Vérifier si l'utilisateur est authentifié
+  if (!accessToken.value) {
+    // Rediriger vers la page de login si non authentifié
     return navigateTo("/login");
-  }
-
-  // Si l'utilisateur est connecté et essaie d'accéder à la page de login
-  if (to.path === "/login" && accessToken.value) {
-    return navigateTo("/dashboard");
   }
 });
