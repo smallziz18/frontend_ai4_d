@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { useSignup } from "~~/composables/use-signup";
 import { onMounted, ref } from "vue";
+
+import { useSignup } from "~/composables/use-signup";
 
 const { signupEtudiant, baseData } = useSignup();
 const router = useRouter();
@@ -22,15 +23,17 @@ onMounted(() => {
 });
 
 function addSkill() {
-  const trimmed = newSkill.value.trim();
-  if (trimmed && !skills.value.includes(trimmed)) {
-    skills.value.push(trimmed);
+  const trimmedSkill = newSkill.value.trim();
+  if (trimmedSkill && !skills.value.includes(trimmedSkill)) {
+    skills.value.push(trimmedSkill);
     newSkill.value = "";
+    console.warn("Compétences actuelles:", skills.value);
   }
 }
 
 function removeSkill(index: number) {
   skills.value.splice(index, 1);
+  console.warn("Compétences après suppression:", skills.value);
 }
 
 function getTechLevelLabel(value: number) {
@@ -60,15 +63,8 @@ async function handleSubmit() {
     await router.push(`/verify-email?email=${encodeURIComponent(baseData.value?.email || "")}`);
   }
   catch (e: any) {
+    error.value = e.message || "Erreur lors de l'inscription. Veuillez réessayer.";
     console.error("Erreur complète:", e);
-
-    // Gérer les différents types d'erreurs
-    if (e.statusCode === 409 || e.message?.includes("already exists")) {
-      error.value = "Cet email ou nom d'utilisateur est déjà utilisé. Veuillez en choisir un autre ou vous connecter.";
-    }
-    else {
-      error.value = e.message || "Erreur lors de l'inscription. Veuillez réessayer.";
-    }
   }
   finally {
     loading.value = false;
@@ -105,18 +101,8 @@ function handleBack() {
             </div>
           </div>
 
-          <div v-if="error" class="alert alert-error">
-            <Icon name="tabler:alert-circle" size="24" />
-            <div>
-              <span>{{ error }}</span>
-              <NuxtLink
-                v-if="error.includes('déjà utilisé')"
-                to="/login"
-                class="link link-hover font-semibold ml-1"
-              >
-                Se connecter
-              </NuxtLink>
-            </div>
+          <div v-if="error" class="p-3 rounded-lg bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 text-sm">
+            {{ error }}
           </div>
 
           <!-- Form -->

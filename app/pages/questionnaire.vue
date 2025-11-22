@@ -1,7 +1,10 @@
 <script setup lang="ts">
-import { useQuestionnaire } from "~~/composables/use-questionnaire";
-
+import { useQuestionnaire } from "~/composables/use-questionnaire";
 import { useAuth } from "~/data/use-auth";
+
+definePageMeta({
+  middleware: ["auth"],
+});
 
 const { user } = useAuth();
 const {
@@ -11,9 +14,11 @@ const {
   quizCompleted,
   evaluationResult,
   questionTaskId,
+  analysisTaskId,
   taskCheckAttempts,
   generateQuestionnaire,
   checkTaskStatus,
+  checkAnalysisStatus,
   parseQuestionsPayload,
   submitQuestionnaire,
   resetQuestionnaire,
@@ -67,6 +72,16 @@ watch(questionTaskId, async (taskId) => {
   if (taskId && !questions.value && !checkingTask.value) {
     checkingTask.value = true;
     await pollTaskStatus(taskId);
+  }
+}, { immediate: true });
+
+// Watcher pour l'analyse du profil
+const checkingAnalysis = ref(false);
+watch(analysisTaskId, async (taskId) => {
+  if (taskId && quizCompleted.value && !checkingAnalysis.value) {
+    checkingAnalysis.value = true;
+    // Ne rien faire automatiquement, l'utilisateur cliquera sur le bouton
+    // Mais on pourrait ajouter un indicateur visuel
   }
 }, { immediate: true });
 
@@ -135,7 +150,13 @@ function handleNext() {
 async function handleSubmit() {
   try {
     loading.value = true;
-    await submitQuestionnaire();
+    error.value = "";
+    const result = await submitQuestionnaire();
+
+    // Stocker le task_id de l'analyse pour vérifier son statut
+    if (result && result.analysisTaskId) {
+      analysisTaskId.value = result.analysisTaskId;
+    }
   }
   catch (e: any) {
     error.value = e.message || "Erreur lors de la soumission";
@@ -151,8 +172,67 @@ function handleRetry() {
   startGeneration();
 }
 
-function goToDashboard() {
-  router.push("/dashboard");
+async function goToDashboard() {
+  loading.value = true;
+  error.value = "";
+
+  try {
+    // Si nous avons un task_id d'analyse, vérifier son statut
+    if (analysisTaskId.value) {
+      const maxAttempts = 30; // 30 * 2s = 1 minute max
+      let attempts = 0;
+
+      while (attempts < maxAttempts) {
+        const taskData = await checkAnalysisStatus(analysisTaskId.value);
+
+        if (!taskData) {
+          attempts++;
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          continue;
+        }
+
+        const status = taskData.status?.toLowerCase();
+
+        if (status === "success" || status === "succeeded") {
+          // L'analyse est terminée et le profil a été créé
+          analysisTaskId.value = null;
+          await router.push("/dashboard");
+          return;
+        }
+        else if (status === "failure" || status === "failed") {
+          error.value = "La création du profil a échoué. Veuillez réessayer.";
+          analysisTaskId.value = null;
+          return;
+        }
+
+        // Statut en cours (pending, started, etc.)
+        attempts++;
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+
+      // Timeout
+      error.value = "La création du profil prend plus de temps que prévu. Veuillez patienter encore quelques instants puis réessayer.";
+    }
+    else {
+      // Pas de task_id, essayer quand même de vérifier si le profil existe
+      const { hasProfile } = useProfile();
+      const profileExists = await hasProfile();
+
+      if (profileExists) {
+        await router.push("/dashboard");
+      }
+      else {
+        error.value = "Votre profil n'a pas encore été créé. Veuillez patienter.";
+      }
+    }
+  }
+  catch (e: any) {
+    console.error("Erreur lors de la vérification du profil:", e);
+    error.value = "Impossible de vérifier le profil. Veuillez réessayer.";
+  }
+  finally {
+    loading.value = false;
+  }
 }
 
 const elapsedTime = computed(() => {
@@ -285,6 +365,19 @@ const progressValue = computed(() => {
             <span>✅ Questionnaire terminé!</span>
           </div>
 
+          <!-- Info création profil -->
+          <div class="alert alert-info">
+            <Icon name="tabler:info-circle" size="24" />
+            <div>
+              <h3 class="font-bold">
+                Création de votre profil en cours
+              </h3>
+              <p class="text-sm">
+                Notre IA analyse vos réponses pour créer votre profil personnalisé. Cela peut prendre quelques instants.
+              </p>
+            </div>
+          </div>
+
           <div class="stats stats-vertical lg:stats-horizontal shadow w-full">
             <div class="stat">
               <div class="stat-figure text-primary">
@@ -377,21 +470,30 @@ const progressValue = computed(() => {
           </div>
 
           <!-- Actions -->
-          <div class="flex gap-4 justify-center">
-            <button
-              class="btn btn-primary btn-lg"
-              @click="goToDashboard"
-            >
-              <Icon name="tabler:home" size="20" />
-              Aller au Dashboard
-            </button>
-            <button
-              class="btn btn-outline btn-lg"
-              @click="handleRetry"
-            >
-              <Icon name="tabler:refresh" size="20" />
-              Refaire le questionnaire
-            </button>
+          <div class="flex flex-col gap-4 items-center">
+            <div class="flex gap-4 justify-center">
+              <button
+                class="btn btn-primary btn-lg"
+                :class="{ loading }"
+                :disabled="loading"
+                @click="goToDashboard"
+              >
+                <Icon
+                  v-if="!loading"
+                  name="tabler:home"
+                  size="20"
+                />
+                {{ loading ? "Vérification du profil..." : "Aller au Dashboard" }}
+              </button>
+              <button
+                class="btn btn-outline btn-lg"
+                :disabled="loading"
+                @click="handleRetry"
+              >
+                <Icon name="tabler:refresh" size="20" />
+                Refaire le questionnaire
+              </button>
+            </div>
           </div>
         </div>
 

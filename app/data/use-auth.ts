@@ -4,14 +4,8 @@ export type User = {
   email: string;
 };
 
-type LoginResponse = {
-  message: string;
-  access_token: string;
-  refresh_token: string;
-  user: User;
-};
-
 export function useAuth() {
+  const api = useApi();
   const user = useState<User | null>("user", () => null);
   const accessToken = useCookie("access_token", {
     maxAge: 60 * 60 * 24 * 7, // 7 jours
@@ -34,35 +28,28 @@ export function useAuth() {
   };
 
   const login = async (email: string, password: string) => {
-    const { data, error } = await useFetch<LoginResponse>("http://127.0.0.1:8000/api/auth/v1/login", {
-      method: "POST",
-      body: { email, password },
-    });
+    try {
+      const data = await api.auth.login(email, password);
 
-    if (error.value) {
+      if (data) {
+        accessToken.value = data.access_token;
+        refreshToken.value = data.refresh_token;
+        userCookie.value = JSON.stringify(data.user);
+        user.value = data.user;
+      }
+
+      return user.value;
+    }
+    catch (error: any) {
       // Si l'erreur est liée à un compte non vérifié, on lance une erreur spécifique
-      const errorMessage = error.value.data?.detail || "Échec de connexion";
+      const errorMessage = error.data?.detail || error.message || "Échec de connexion";
       throw new Error(errorMessage);
     }
-
-    if (data.value) {
-      accessToken.value = data.value.access_token;
-      refreshToken.value = data.value.refresh_token;
-      userCookie.value = JSON.stringify(data.value.user);
-      user.value = data.value.user;
-    }
-
-    return user.value;
   };
 
   const logout = async () => {
     try {
-      await useFetch("http://127.0.0.1:8000/api/auth/v1/logout", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${accessToken.value}`,
-        },
-      });
+      await api.auth.logout();
     }
     catch (e) {
       console.error("Erreur lors de la déconnexion:", e);

@@ -1,15 +1,18 @@
 <script setup lang="ts">
-import { useProfile } from "~~/composables/use-profile";
-import { useQuestionnaire } from "~~/composables/use-questionnaire";
-
+import { useProfile } from "~/composables/use-profile";
+import { useQuestionnaire } from "~/composables/use-questionnaire";
 import { useAuth } from "~/data/use-auth";
 
+definePageMeta({
+  middleware: ["auth"],
+});
+
 const { user, logout, loadUserFromCookie } = useAuth();
-const { profile, profileLoading, fetchProfile, fetchRecommendations } = useProfile();
+const { profile, profileLoading, fetchProfile, fetchRecommendations, checkProfileStatus, hasProfile } = useProfile();
 const { evaluationResult } = useQuestionnaire();
 const router = useRouter();
-const hasCompletedQuestionnaire = useCookie("questionnaire_completed", { default: () => false });
-const showWelcomeModal = ref(false);
+const recommendationsAvailable = ref(false);
+const analysisInProgress = ref(false);
 
 // Calculer le niveau d'après le score
 const userLevel = computed(() => {
@@ -37,6 +40,33 @@ const levelColor = computed(() => {
   return "badge-error";
 });
 
+async function tryLoadRecommendations() {
+  try {
+    await fetchRecommendations();
+    recommendationsAvailable.value = true;
+  }
+  catch (e: any) {
+    console.warn("Recommandations pas encore disponibles:", e);
+    recommendationsAvailable.value = false;
+
+    // Vérifier si une analyse est en cours
+    const analysisTaskId = useCookie("analysis_task_id").value;
+    if (analysisTaskId) {
+      analysisInProgress.value = true;
+      // Vérifier le statut de l'analyse
+      const status = await checkProfileStatus(analysisTaskId as string);
+      if (status?.status === "success" || status?.status === "succeeded") {
+        // L'analyse est terminée, essayer de recharger
+        await tryLoadRecommendations();
+      }
+    }
+  }
+}
+
+async function refreshRecommendations() {
+  await tryLoadRecommendations();
+}
+
 // Charger l'utilisateur depuis les cookies au montage
 onMounted(async () => {
   // Vérifier l'authentification
@@ -48,151 +78,67 @@ onMounted(async () => {
 
   await loadUserFromCookie();
 
-  // Si le questionnaire est complété, charger le profil
-  if (hasCompletedQuestionnaire.value) {
-    await fetchProfile();
-    await fetchRecommendations();
+  // Vérifier si l'utilisateur a un profil
+  const profileExists = await hasProfile();
 
-    // Si pas de profil du backend, utiliser des données de fallback pour le développement
-    if (!profile.value && evaluationResult.value) {
-      profile.value = {
-        analysis: {
-          niveau_global: userLevel.value,
-          points_forts: [
-            "Bonne compréhension des concepts de base",
-            "Capacité d'analyse logique",
-            "Motivation pour apprendre",
-          ],
-          points_ameliorer: [
-            "Pratique régulière recommandée",
-            "Approfondissement des sujets avancés",
-          ],
-          style_apprentissage: "Visuel et pratique avec des exemples concrets",
-        },
-        recommendations: [
-          `Commencez par les cours de niveau ${userLevel.value}`,
-          "Pratiquez régulièrement avec des exercices interactifs",
-          "Rejoignez une communauté d'apprentissage",
-        ],
-        next_steps: [
-          "Complétez le module d'introduction",
-          "Réalisez 3 exercices pratiques par semaine",
-          "Participez aux sessions de groupe en ligne",
-        ],
-      };
-    }
+  if (!profileExists) {
+    // Nouvel utilisateur sans profil -> rediriger vers questionnaire
+    await navigateTo("/questionnaire");
+    return;
   }
-  else {
-    // Sinon afficher le modal de bienvenue
-    showWelcomeModal.value = true;
+
+  // Utilisateur existant -> charger le profil
+  await fetchProfile();
+
+  // Essayer de charger les recommandations (peut échouer si l'analyse n'est pas encore terminée)
+  await tryLoadRecommendations();
+
+  // Si pas de profil du backend, utiliser des données de fallback pour le développement
+  if (!profile.value && evaluationResult.value) {
+    profile.value = {
+      analysis: {
+        niveau_global: "Débutant",
+        points_forts: [
+          "Bonne compréhension des concepts de base",
+          "Capacité d'analyse logique",
+          "Motivation pour apprendre",
+        ],
+        points_ameliorer: [
+          "Pratique régulière recommandée",
+          "Approfondissement des sujets avancés",
+        ],
+        style_apprentissage: "Visuel et pratique avec des exemples concrets",
+      },
+      recommendations: [
+        "Commencez par les cours de base",
+        "Pratiquez régulièrement avec des exercices interactifs",
+        "Rejoignez une communauté d'apprentissage",
+      ],
+      next_steps: [
+        "Complétez le module d'introduction",
+        "Réalisez 3 exercices pratiques par semaine",
+        "Participez aux sessions de groupe en ligne",
+      ],
+    };
+    recommendationsAvailable.value = true;
   }
 });
 
 async function handleLogout() {
   await logout();
+  // Supprimer tous les cookies de session
+  const analysisCookie = useCookie("analysis_task_id");
+  analysisCookie.value = null;
   await navigateTo("/login");
 }
 
 function goToQuestionnaire() {
-  showWelcomeModal.value = false;
   router.push("/questionnaire");
-}
-
-function skipQuestionnaire() {
-  showWelcomeModal.value = false;
 }
 </script>
 
 <template>
   <div class="min-h-screen bg-background-light dark:bg-background-dark">
-    <!-- Modal de bienvenue -->
-    <dialog
-      :open="showWelcomeModal"
-      class="modal"
-      :class="{ 'modal-open': showWelcomeModal }"
-    >
-      <div class="modal-box max-w-2xl">
-        <div class="text-center">
-          <Icon
-            name="tabler:sparkles"
-            size="64"
-            class="mx-auto mb-4 text-primary"
-          />
-          <h3 class="font-bold text-3xl mb-4">
-            Bienvenue sur AI-Edu ! 🎉
-          </h3>
-          <p class="text-lg mb-6">
-            Pour personnaliser votre expérience d'apprentissage, nous vous invitons à répondre à un questionnaire de diagnostic.
-          </p>
-
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-            <div class="p-4 bg-base-200 rounded-lg">
-              <Icon
-                name="tabler:brain"
-                size="32"
-                class="mx-auto mb-2 text-primary"
-              />
-              <p class="font-semibold mb-1">
-                Personnalisé
-              </p>
-              <p class="text-sm opacity-70">
-                L'IA adapte le contenu à votre niveau
-              </p>
-            </div>
-            <div class="p-4 bg-base-200 rounded-lg">
-              <Icon
-                name="tabler:clock"
-                size="32"
-                class="mx-auto mb-2 text-primary"
-              />
-              <p class="font-semibold mb-1">
-                10-15 minutes
-              </p>
-              <p class="text-sm opacity-70">
-                Questions aléatoires adaptées
-              </p>
-            </div>
-            <div class="p-4 bg-base-200 rounded-lg">
-              <Icon
-                name="tabler:chart-line"
-                size="32"
-                class="mx-auto mb-2 text-primary"
-              />
-              <p class="font-semibold mb-1">
-                Suivi des progrès
-              </p>
-              <p class="text-sm opacity-70">
-                Analyse détaillée de vos compétences
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div class="modal-action justify-center gap-3">
-          <button
-            class="btn btn-primary btn-lg"
-            @click="goToQuestionnaire"
-          >
-            <Icon name="tabler:clipboard-check" size="20" />
-            Commencer maintenant
-          </button>
-          <button
-            class="btn btn-ghost btn-lg"
-            @click="skipQuestionnaire"
-          >
-            Plus tard
-          </button>
-        </div>
-      </div>
-      <form
-        method="dialog"
-        class="modal-backdrop"
-        @click="skipQuestionnaire"
-      >
-        <button>close</button>
-      </form>
-    </dialog>
-
     <!-- Navbar -->
     <div class="navbar bg-base-100 shadow-sm">
       <div class="flex-1">
@@ -237,7 +183,7 @@ function skipQuestionnaire() {
     </div>
 
     <!-- Dashboard with profile -->
-    <div v-else-if="hasCompletedQuestionnaire && (profile || evaluationResult)" class="container mx-auto px-4 py-8">
+    <div v-else-if="profile || evaluationResult" class="container mx-auto px-4 py-8">
       <!-- Header avec score -->
       <div class="mb-8">
         <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -447,6 +393,41 @@ function skipQuestionnaire() {
                   />
                   <span>{{ rec }}</span>
                 </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Message si recommandations pas encore disponibles -->
+          <div v-else-if="!recommendationsAvailable && analysisInProgress" class="card bg-base-100 shadow-xl border-2 border-warning">
+            <div class="card-body">
+              <h2 class="card-title text-2xl">
+                <Icon
+                  name="tabler:clock-hour-4"
+                  size="28"
+                  class="text-warning"
+                />
+                Analyse IA en cours...
+              </h2>
+
+              <div class="divider" />
+
+              <div class="alert alert-warning">
+                <Icon name="tabler:info-circle" size="24" />
+                <div>
+                  <h3 class="font-bold">
+                    Vos recommandations personnalisées arrivent bientôt !
+                  </h3>
+                  <p class="text-sm">
+                    Notre IA analyse vos réponses pour vous fournir des recommandations sur mesure. Cela peut prendre quelques minutes.
+                  </p>
+                </div>
+              </div>
+
+              <div class="card-actions justify-end mt-4">
+                <button class="btn btn-outline btn-warning" @click="refreshRecommendations">
+                  <Icon name="tabler:refresh" size="20" />
+                  Rafraîchir
+                </button>
               </div>
             </div>
           </div>

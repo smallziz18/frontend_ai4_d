@@ -1,7 +1,9 @@
 <script setup lang="ts">
+import { useProfile } from "~/composables/use-profile";
 import { useAuth } from "~/data/use-auth";
 
 const { login } = useAuth();
+const { hasProfile } = useProfile();
 const route = useRoute();
 
 const email = ref("");
@@ -27,7 +29,18 @@ async function handleLogin() {
 
   try {
     await login(email.value, password.value);
-    await navigateTo("/dashboard");
+
+    // Vérifier si l'utilisateur a déjà un profil (utilisateur existant)
+    const profileExists = await hasProfile();
+
+    if (profileExists) {
+      // Utilisateur existant -> dashboard
+      await navigateTo("/dashboard");
+    }
+    else {
+      // Nouvel utilisateur -> questionnaire
+      await navigateTo("/questionnaire");
+    }
   }
   catch (e: any) {
     // Afficher le message d'erreur du backend (ex: compte non vérifié)

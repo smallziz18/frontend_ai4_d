@@ -12,7 +12,16 @@ export default withNuxt(antfu({
     semi: true,
     quotes: "double",
   },
-  ignores: [".npm-store/**", "**/migrations/*"],
+  ignores: [
+    ".npm-store/**",
+    "**/migrations/*",
+    "**/*.md",
+    ".nuxt/**",
+    "dist/**",
+    ".output/**",
+    "node_modules/**",
+    ".cache/**",
+  ],
 }, {
   rules: {
     "vue/max-attributes-per-line": ["error", {

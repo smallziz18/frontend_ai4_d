@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { useSignup } from "~~/composables/use-signup";
 import { onMounted, ref } from "vue";
 
+import { useSignup } from "~/composables/use-signup";
+
 const { signupProfesseur, baseData } = useSignup();
-const router = useRouter();
 
 const techLevel = ref(7);
 const specialites = ref<string[]>([]);
@@ -16,14 +16,13 @@ const loading = ref(false);
 // Rediriger si pas de données de base
 onMounted(() => {
   if (!baseData.value) {
-    router.push("/sign-up");
+    navigateTo("/sign-up");
   }
 });
 
 function addSpecialite() {
-  const trimmed = newSpecialite.value.trim();
-  if (trimmed && !specialites.value.includes(trimmed)) {
-    specialites.value.push(trimmed);
+  if (newSpecialite.value.trim() && !specialites.value.includes(newSpecialite.value.trim())) {
+    specialites.value.push(newSpecialite.value.trim());
     newSpecialite.value = "";
   }
 }
@@ -61,18 +60,11 @@ async function handleSubmit() {
     });
 
     // Rediriger vers la page de vérification email après inscription réussie
-    await router.push(`/verify-email?email=${encodeURIComponent(baseData.value?.email || "")}`);
+    await navigateTo(`/verify-email?email=${encodeURIComponent(baseData.value?.email || "")}`);
   }
   catch (e: any) {
+    error.value = e.message || "Erreur lors de l'inscription. Veuillez réessayer.";
     console.error("Erreur complète:", e);
-
-    // Gérer les différents types d'erreurs
-    if (e.statusCode === 409 || e.message?.includes("already exists")) {
-      error.value = "Cet email ou nom d'utilisateur est déjà utilisé. Veuillez en choisir un autre ou vous connecter.";
-    }
-    else {
-      error.value = e.message || "Erreur lors de l'inscription. Veuillez réessayer.";
-    }
   }
   finally {
     loading.value = false;
@@ -80,7 +72,7 @@ async function handleSubmit() {
 }
 
 function handleBack() {
-  router.push("/sign-up");
+  navigateTo("/sign-up");
 }
 </script>
 
@@ -109,18 +101,8 @@ function handleBack() {
             </div>
           </div>
 
-          <div v-if="error" class="alert alert-error">
-            <Icon name="tabler:alert-circle" size="24" />
-            <div>
-              <span>{{ error }}</span>
-              <NuxtLink
-                v-if="error.includes('déjà utilisé')"
-                to="/login"
-                class="link link-hover font-semibold ml-1"
-              >
-                Se connecter
-              </NuxtLink>
-            </div>
+          <div v-if="error" class="p-3 rounded-lg bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 text-sm">
+            {{ error }}
           </div>
 
           <!-- Form -->

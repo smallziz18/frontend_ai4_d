@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { useSignup } from "~~/composables/use-signup";
 import { ref } from "vue";
+
+import { useSignup } from "~/composables/use-signup";
 
 const { setBaseData } = useSignup();
 const router = useRouter();
@@ -46,13 +47,16 @@ async function handleNext() {
   }
 
   // Stocker les données de base
-  setBaseData({
-    nom: nom.value,
-    prenom: prenom.value,
-    username: username.value,
-    email: email.value,
-    motDePasseHash: password.value,
-  });
+  setBaseData(
+    {
+      nom: nom.value,
+      prenom: prenom.value,
+      username: username.value,
+      email: email.value,
+      motDePasseHash: password.value,
+    },
+    userType.value === "student" ? "Etudiant" : "Professeur",
+  );
 
   // Navigation vers la page appropriée
   try {
