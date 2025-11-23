@@ -1,14 +1,5 @@
 <script setup lang="ts">
-const colormod = useColorMode();
-
-const isDark = computed({
-  get() {
-    return colormod.value === "dark";
-  },
-  set(value) {
-    colormod.value = value ? "dark" : "light";
-  },
-});
+// Le composant theme-toggle gère le thème
 </script>
 
 <template>
@@ -18,7 +9,7 @@ const isDark = computed({
         AI4D School
       </NuxtLink>
     </div>
-    <div class=" flex-1">
+    <div class="flex-1">
       <NuxtLink to="/login" class="btn btn-outline btn-primary mr-2">
         Log in
       </NuxtLink>
@@ -26,25 +17,9 @@ const isDark = computed({
         Sign up
       </NuxtLink>
     </div>
-    <div class=" flex-none">
-      <label class="flex cursor-pointer gap-2">
-        <Icon name="tabler:sun" size="24" />
-        <input
-          v-model="isDark"
-          type="checkbox"
-          value="synthwave"
-          class="toggle theme-controller"
-        >
-        <Icon
-          :is-dark
-          name="tabler:moon-filled"
-          size="24"
-        />
-      </label>
+    <div class="flex-none">
+      <!-- Nouveau toggle de thème -->
+      <ThemeToggle />
     </div>
   </div>
 </template>
-
-<style scoped>
-
-</style>

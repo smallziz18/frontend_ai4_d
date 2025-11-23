@@ -119,9 +119,19 @@ export function useApi() {
 
     // ============== PROFILE ENDPOINTS ==============
     profile: {
-      // GET /api/profile/v1/ ou /api/profile/v1/me
+      // GET /api/profile/v1/me ou /api/profile/v1/me
       getMyProfile: async () => {
         return await apiFetch("/api/profile/v1/me", {
+          method: "GET",
+        });
+      },
+
+      // GET /api/profile/v1/has-profile
+      hasProfile: async () => {
+        return await apiFetch<{
+          has_profile: boolean;
+          questionnaire_completed: boolean;
+        }>("/api/profile/v1/has-profile", {
           method: "GET",
         });
       },
@@ -232,6 +242,79 @@ export function useApi() {
       // GET /api/profile/v1/analysis_result/{task_id}
       getAnalysisResult: async (taskId: string) => {
         return await apiFetch(`/api/profile/v1/analysis_result/${taskId}`, {
+          method: "GET",
+        });
+      },
+    },
+
+    // ============== QUESTIONNAIRE V2 (LangGraph Multi-Agents) ==============
+    questionnaireV2: {
+      // POST /api/profile/v1/v2/generate-questions
+      generateQuestions: async () => {
+        return await apiFetch<{
+          session_id: string;
+          questions: Array<{
+            numero: number;
+            question: string;
+            type: string;
+            options?: string[];
+            correction: string;
+          }>;
+          profiler_analysis: {
+            niveau_estime: number;
+            style_apprentissage: string;
+            motivation: string;
+          };
+          timestamp: string;
+        }>("/api/profile/v1/v2/generate-questions", {
+          method: "POST",
+        });
+      },
+
+      // POST /api/profile/v1/v2/submit-responses
+      submitResponses: async (sessionId: string, responses: Array<{
+        numero: number;
+        reponse: string;
+        type: string;
+      }>) => {
+        return await apiFetch<{
+          session_id: string;
+          niveau_final: number;
+          evaluation: {
+            score_total: number;
+            score_percentage: number;
+            details_par_question: any[];
+          };
+          parcours_apprentissage: {
+            titre: string;
+            duree_estimee: string;
+            quetes_principales: any[];
+            boss_fights: any[];
+          };
+          tutorials: any[];
+          gamification: {
+            badges_earned: string[];
+            xp_gained: number;
+            level_up: boolean;
+          };
+          recommendations: string[];
+          timestamp: string;
+        }>("/api/profile/v1/v2/submit-responses", {
+          method: "POST",
+          body: { session_id: sessionId, responses },
+        });
+      },
+
+      // GET /api/profile/v1/v2/learning-path
+      getLearningPath: async () => {
+        return await apiFetch("/api/profile/v1/v2/learning-path", {
+          method: "GET",
+        });
+      },
+
+      // GET /api/profile/v1/v2/workflow-state/{session_id}
+      getWorkflowState: async (sessionId: string) => {
+        return await apiFetch(`/api/profile/v1/v2/workflow-state/${sessionId}`, {
           method: "GET",
         });
       },

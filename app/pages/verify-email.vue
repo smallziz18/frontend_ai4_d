@@ -1,28 +1,30 @@
 <script setup lang="ts">
+import { useApi } from "~/composables/use-api";
+
 const route = useRoute();
-const email = ref(route.query.email as string || "");
+const api = useApi();
+
+const email = ref((route.query.email as string) || "");
 const resendLoading = ref(false);
 const resendSuccess = ref(false);
 const resendError = ref("");
 
 async function resendVerificationEmail() {
-  if (!email.value)
+  if (!email.value) {
+    resendError.value = "Veuillez entrer votre adresse email";
     return;
+  }
 
   resendLoading.value = true;
   resendError.value = "";
   resendSuccess.value = false;
 
   try {
-    await useFetch(`http://127.0.0.1:8000/api/auth/v1/resend-verification`, {
-      method: "POST",
-      body: { email: email.value },
-    });
-
+    await api.auth.resendVerification(email.value);
     resendSuccess.value = true;
   }
-  catch (e) {
-    resendError.value = "Erreur lors de l'envoi de l'email. Veuillez réessayer.";
+  catch (e: any) {
+    resendError.value = e.message || "Erreur lors de l'envoi de l'email. Veuillez réessayer.";
     console.error(e);
   }
   finally {

@@ -59,6 +59,11 @@ async function handleLogin() {
 
 <template>
   <body class="bg-background-light dark:bg-background-dark font-display">
+    <!-- Theme Toggle en haut à droite -->
+    <div class="fixed top-4 right-4 z-50">
+      <ThemeToggle />
+    </div>
+
     <form class="relative flex min-h-screen w-full flex-col items-center justify-center bg-background-light dark:bg-background-dark group/design-root overflow-x-hidden" @submit.prevent="handleLogin">
       <div class="layout-container flex h-full grow flex-col w-full max-w-md px-4 sm:px-6 lg:px-8">
         <div class="flex flex-col items-center justify-center py-12">

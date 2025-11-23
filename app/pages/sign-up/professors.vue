@@ -78,6 +78,11 @@ function handleBack() {
 
 <template>
   <body class="bg-background-light dark:bg-background-dark font-display">
+    <!-- Theme Toggle en haut à droite -->
+    <div class="fixed top-4 right-4 z-50">
+      <ThemeToggle />
+    </div>
+
     <div class="relative flex min-h-screen w-full flex-col overflow-x-hidden py-12">
       <div class="w-full max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="flex flex-col gap-8">

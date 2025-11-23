@@ -76,6 +76,11 @@ async function handleNext() {
 
 <template>
   <body class="bg-background-light dark:bg-background-dark font-display">
+    <!-- Theme Toggle en haut à droite -->
+    <div class="fixed top-4 right-4 z-50">
+      <ThemeToggle />
+    </div>
+
     <div class="relative flex min-h-screen w-full flex-col group/design-root overflow-x-hidden">
       <div class="layout-container flex h-full grow flex-col">
         <div class="flex flex-1">
