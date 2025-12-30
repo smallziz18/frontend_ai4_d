@@ -3,7 +3,8 @@ import { useQuestionnaire } from "~/composables/use-questionnaire";
 import { useAuth } from "~/data/use-auth";
 
 definePageMeta({
-  middleware: ["auth"],
+  middleware: ["auth", "check-profile"],
+  layout: "empty",
 });
 
 const { user } = useAuth();
@@ -46,6 +47,18 @@ onMounted(async () => {
     return;
   }
 
+  // ✅ Vérifier si l'utilisateur a déjà un profil
+  // Si oui, le questionnaire a déjà été fait -> rediriger vers dashboard
+  const { hasProfile: checkProfile } = useProfile();
+  const profileExists = await checkProfile();
+
+  if (profileExists) {
+    console.warn("⚠️ Profil déjà existant - Redirection vers dashboard");
+    await navigateTo("/dashboard");
+    return;
+  }
+
+  // Pas de profil -> lancer le questionnaire
   if (!questions.value && !questionTaskId.value && !quizCompleted.value) {
     await startGeneration();
   }
@@ -75,13 +88,13 @@ watch(questionTaskId, async (taskId) => {
   }
 }, { immediate: true });
 
-// Watcher pour l'analyse du profil
+// Watcher pour l'analyse du profil - AUTOMATIQUE
 const checkingAnalysis = ref(false);
 watch(analysisTaskId, async (taskId) => {
   if (taskId && quizCompleted.value && !checkingAnalysis.value) {
     checkingAnalysis.value = true;
-    // Ne rien faire automatiquement, l'utilisateur cliquera sur le bouton
-    // Mais on pourrait ajouter un indicateur visuel
+    // 🚀 Automatiquement vérifier le statut de l'analyse et rediriger quand prêt
+    await pollAnalysisStatus(taskId);
   }
 }, { immediate: true });
 
@@ -135,6 +148,78 @@ async function pollTaskStatus(taskId: string) {
   checkingTask.value = false;
 }
 
+// 🚀 Fonction pour vérifier automatiquement le statut de l'analyse et rediriger
+async function pollAnalysisStatus(taskId: string) {
+  const maxAttempts = 60; // 60 * 3s = 3 minutes max
+  let attempts = 0;
+
+  console.warn(`🔍 Démarrage du polling pour l'analyse (task_id: ${taskId})`);
+
+  while (attempts < maxAttempts) {
+    await new Promise(resolve => setTimeout(resolve, 3000)); // Attendre 3s
+
+    const taskData = await checkAnalysisStatus(taskId);
+
+    if (!taskData) {
+      attempts++;
+      console.warn(`⏱️ Tentative ${attempts}/${maxAttempts} - Pas de données reçues`);
+      continue;
+    }
+
+    const status = taskData.status?.toLowerCase();
+    console.warn(`📊 Tentative ${attempts}/${maxAttempts} - Statut: ${status}`);
+
+    if (status === "success" || status === "succeeded") {
+      // ✅ L'analyse est terminée et le profil a été créé côté backend
+      console.warn("✅ Profil créé avec succès - Vérification finale avant redirection...");
+
+      analysisTaskId.value = null;
+      checkingAnalysis.value = false;
+
+      // Invalider le cache du profil
+      const { invalidateHasProfileCache, hasProfile: checkProfile } = useProfile();
+      invalidateHasProfileCache();
+
+      // Attendre un peu pour que le backend finalise
+      await new Promise(r => setTimeout(r, 2000));
+
+      // Vérifier que le profil existe réellement
+      const profileExists = await checkProfile();
+
+      if (profileExists) {
+        console.warn("✅ Profil confirmé - Redirection vers dashboard...");
+
+        // Marquer qu'on vient de compléter le questionnaire
+        sessionStorage.setItem("from_questionnaire", "true");
+
+        // ✅ Rediriger automatiquement vers le dashboard
+        await router.push("/dashboard");
+        return;
+      }
+      else {
+        console.error("❌ Le profil n'existe pas malgré le statut success");
+        error.value = "❌ Le profil n'a pas été créé correctement. Veuillez contacter le support.";
+        return;
+      }
+    }
+    else if (status === "failure" || status === "failed") {
+      console.error(`❌ Échec de l'analyse: ${taskData.error || "Raison inconnue"}`);
+      error.value = `❌ La création du profil a échoué: ${taskData.error || "Erreur inconnue"}. Veuillez réessayer.`;
+      analysisTaskId.value = null;
+      checkingAnalysis.value = false;
+      return;
+    }
+
+    // Statut en cours (pending, started, etc.)
+    attempts++;
+  }
+
+  // Timeout - mais on affiche un message moins effrayant
+  console.warn("⏱️ Timeout lors de la vérification de l'analyse (3 minutes)");
+  error.value = "⏱️ La création du profil prend plus de temps que prévu. Vous pouvez cliquer sur le bouton pour accéder au dashboard.";
+  checkingAnalysis.value = false;
+}
+
 function handlePrevious() {
   if (currentQuestionIndex.value > 0) {
     currentQuestionIndex.value--;
@@ -142,27 +227,42 @@ function handlePrevious() {
 }
 
 function handleNext() {
+  // ✅ Permettre de passer des questions sans réponse (l'utilisateur ne connaît pas)
+  // On efface juste l'erreur si elle existe
+  error.value = "";
+
   if (questions.value && currentQuestionIndex.value < questions.value.length - 1) {
     currentQuestionIndex.value++;
   }
 }
 
 async function handleSubmit() {
-  try {
-    loading.value = true;
-    error.value = "";
-    const result = await submitQuestionnaire();
+  // Vérifier qu'au moins une question a été répondue
+  // eslint-disable-next-line ts/no-use-before-define
+  if (atLeastOneAnswered.value) {
+    try {
+      loading.value = true;
+      error.value = "";
+      const result = await submitQuestionnaire();
 
-    // Stocker le task_id de l'analyse pour vérifier son statut
-    if (result && result.analysisTaskId) {
-      analysisTaskId.value = result.analysisTaskId;
+      // Stocker le task_id de l'analyse pour vérifier son statut
+      if (result && result.analysisTaskId) {
+        analysisTaskId.value = result.analysisTaskId;
+      }
+      else {
+        // Si pas de task_id retourné, afficher une erreur
+        error.value = "❌ Aucune tâche d'analyse n'a été créée. Le profil ne sera pas créé. Veuillez réessayer.";
+      }
+    }
+    catch (e: any) {
+      error.value = e.message || "Erreur lors de la soumission";
+    }
+    finally {
+      loading.value = false;
     }
   }
-  catch (e: any) {
-    error.value = e.message || "Erreur lors de la soumission";
-  }
-  finally {
-    loading.value = false;
+  else {
+    error.value = "❌ Veuillez répondre à au moins une question avant de soumettre.";
   }
 }
 
@@ -194,8 +294,20 @@ async function goToDashboard() {
         const status = taskData.status?.toLowerCase();
 
         if (status === "success" || status === "succeeded") {
-          // L'analyse est terminée et le profil a été créé
+          // L'analyse est terminée et le profil a été créé côté backend
           analysisTaskId.value = null;
+
+          // Profil créé avec succès - invalider le cache et rediriger
+          const { invalidateHasProfileCache } = useProfile();
+          invalidateHasProfileCache();
+
+          // ✅ Marquer qu'on vient de compléter le questionnaire
+          sessionStorage.setItem("from_questionnaire", "true");
+
+          // Attendre un peu pour que le backend finalise
+          await new Promise(r => setTimeout(r, 1500));
+
+          // Rediriger vers le dashboard
           await router.push("/dashboard");
           return;
         }
@@ -214,11 +326,14 @@ async function goToDashboard() {
       error.value = "La création du profil prend plus de temps que prévu. Veuillez patienter encore quelques instants puis réessayer.";
     }
     else {
-      // Pas de task_id, essayer quand même de vérifier si le profil existe
-      const { hasProfile } = useProfile();
-      const profileExists = await hasProfile();
+      // Pas de task_id: vérifier directement si le profil existe
+      const { hasProfile: checkProfile, invalidateHasProfileCache } = useProfile();
+      invalidateHasProfileCache();
+      const profileExists = await checkProfile();
 
       if (profileExists) {
+        // ✅ Marquer qu'on vient de compléter le questionnaire
+        sessionStorage.setItem("from_questionnaire", "true");
         await router.push("/dashboard");
       }
       else {
@@ -246,6 +361,28 @@ const progressValue = computed(() => {
     return 0;
   const estimatedTime = 120; // 120 secondes (2 minutes)
   return Math.min(Math.floor((elapsedTime.value / estimatedTime) * 95), 95); // Maximum 95% pendant le chargement, 100% quand c'est terminé
+});
+
+// Vérifier si la question actuelle a une réponse
+const currentQuestionAnswered = computed(() => {
+  const answer = answers.value[`q_${currentQuestionIndex.value}`];
+  return answer !== undefined && answer !== null && answer.toString().trim() !== "";
+});
+
+// Vérifier si au moins UNE question a été répondue
+const atLeastOneAnswered = computed(() => {
+  if (!questions.value)
+    return false;
+  return Object.keys(answers.value).some((key) => {
+    const answer = answers.value[key];
+    return answer !== undefined && answer !== null && answer.toString().trim() !== "";
+  });
+});
+
+// Computed pour savoir si on peut soumettre le questionnaire
+// ✅ Permettre de soumettre même avec des réponses vides (au moins 1 réponse suffit)
+const canSubmit = computed(() => {
+  return atLeastOneAnswered.value && !loading.value;
 });
 </script>
 
@@ -471,29 +608,31 @@ const progressValue = computed(() => {
 
           <!-- Actions -->
           <div class="flex flex-col gap-4 items-center">
-            <div class="flex gap-4 justify-center">
-              <button
-                class="btn btn-primary btn-lg"
-                :class="{ loading }"
-                :disabled="loading"
-                @click="goToDashboard"
-              >
-                <Icon
-                  v-if="!loading"
-                  name="tabler:home"
-                  size="20"
-                />
-                {{ loading ? "Vérification du profil..." : "Aller au Dashboard" }}
-              </button>
-              <button
-                class="btn btn-outline btn-lg"
-                :disabled="loading"
-                @click="handleRetry"
-              >
-                <Icon name="tabler:refresh" size="20" />
-                Refaire le questionnaire
-              </button>
+            <div class="alert alert-info max-w-2xl">
+              <Icon name="tabler:info-circle" size="24" />
+              <div>
+                <p class="font-semibold">
+                  ℹ️ Questionnaire unique
+                </p>
+                <p class="text-sm">
+                  Ce questionnaire ne peut être fait qu'une seule fois pour créer votre profil. Une fois votre profil créé, vous pourrez améliorer votre niveau en suivant des cours.
+                </p>
+              </div>
             </div>
+
+            <button
+              class="btn btn-primary btn-lg"
+              :class="{ loading }"
+              :disabled="loading"
+              @click="goToDashboard"
+            >
+              <Icon
+                v-if="!loading"
+                name="tabler:home"
+                size="20"
+              />
+              {{ loading ? "Vérification du profil..." : "Aller au Dashboard" }}
+            </button>
           </div>
         </div>
 
@@ -552,19 +691,26 @@ const progressValue = computed(() => {
                 v-else-if="currentQuestion.type === 'VraiOuFaux'"
                 class="space-y-3"
               >
-                <div
-                  v-for="(option, idx) in (currentQuestion.options || ['A. Vrai', 'B. Faux'])"
-                  :key="idx"
-                  class="form-control"
-                >
+                <div class="form-control">
                   <label class="label cursor-pointer justify-start gap-4 p-4 rounded-lg border hover:bg-base-200">
                     <input
                       v-model="answers[`q_${currentQuestionIndex}`]"
                       type="radio"
-                      :value="option"
+                      value="Vrai"
                       class="radio radio-primary"
                     >
-                    <span class="label-text text-base">{{ option }}</span>
+                    <span class="label-text text-base">✅ Vrai</span>
+                  </label>
+                </div>
+                <div class="form-control">
+                  <label class="label cursor-pointer justify-start gap-4 p-4 rounded-lg border hover:bg-base-200">
+                    <input
+                      v-model="answers[`q_${currentQuestionIndex}`]"
+                      type="radio"
+                      value="Faux"
+                      class="radio radio-primary"
+                    >
+                    <span class="label-text text-base">❌ Faux</span>
                   </label>
                 </div>
               </div>
@@ -618,12 +764,36 @@ const progressValue = computed(() => {
             <button
               v-else
               class="btn btn-success"
-              :disabled="loading"
+              :disabled="!canSubmit"
+              :class="{ 'btn-disabled': !canSubmit }"
               @click="handleSubmit"
             >
               <Icon name="tabler:check" size="20" />
               {{ loading ? "Envoi..." : "Terminer" }}
             </button>
+          </div>
+
+          <!-- Message d'aide si aucune question n'est répondue -->
+          <div v-if="!atLeastOneAnswered" class="alert alert-warning">
+            <Icon name="tabler:alert-triangle" size="24" />
+            <div>
+              <p class="font-semibold">
+                ⚠️ Attention
+              </p>
+              <p class="text-sm">
+                Vous devez répondre à au moins une question pour soumettre le questionnaire.
+              </p>
+            </div>
+          </div>
+
+          <!-- Message d'info pour laisser des questions vides -->
+          <div v-else-if="!currentQuestionAnswered" class="alert alert-info">
+            <Icon name="tabler:info-circle" size="24" />
+            <div>
+              <p class="text-sm">
+                💡 Vous pouvez laisser des questions sans réponse si vous ne connaissez pas la réponse. Cliquez sur "Suivant" pour continuer.
+              </p>
+            </div>
           </div>
         </div>
 

@@ -1,279 +1,284 @@
-type AgentSession = {
-  session_id: string;
-  user_id: string;
-  agent_type: string;
-  status: string;
-  created_at: string;
-  updated_at: string;
-  metadata?: Record<string, any>;
-};
-
-type ConversationMessage = {
-  role: "user" | "assistant" | "system";
-  content: string;
-  timestamp: string;
-};
-
+/**
+ * Composable pour gérer les agents IA multi-tâches
+ * Correspond aux routes /api/ai/v1/agents/*
+ */
 export function useAiAgents() {
-  // État
-  const currentSession = ref<AgentSession | null>(null);
-  const sessionHistory = ref<ConversationMessage[]>([]);
-  const isLoading = ref(false);
-  const error = ref<string>("");
+  const api = useApi();
 
-  // Lister tous les agents disponibles
-  const listAgents = async () => {
+  // État de la session agent en cours
+  const currentSession = ref<{
+    task_id: string | null;
+    agent_type: string | null;
+    status: string | null;
+    result: any | null;
+    error: string | null;
+  }>({
+    task_id: null,
+    agent_type: null,
+    status: null,
+    result: null,
+    error: null,
+  });
+
+  const isProcessing = computed(() => currentSession.value.status === "PENDING" || currentSession.value.status === "STARTED");
+
+  /**
+   * Démarre une session d'agent asynchrone
+   * @param agentType - Type d'agent: "chatbot", "course", "module"
+   * @param params - Paramètres spécifiques à l'agent
+   */
+  async function startAgentSession(agentType: string, params: Record<string, any> = {}) {
     try {
-      isLoading.value = true;
-      error.value = "";
-      const response = await $fetch("/api/v1/ai/agents/", {
-        baseURL: useRuntimeConfig().public.apiBase,
-      });
-      return response;
-    }
-    catch (e: any) {
-      error.value = e.message || "Erreur lors de la récupération des agents";
-      throw e;
-    }
-    finally {
-      isLoading.value = false;
-    }
-  };
+      const response = await api.ai.startAgentTask(agentType, params);
 
-  // Démarrer une nouvelle session avec un agent
-  const startSession = async () => {
-    try {
-      isLoading.value = true;
-      error.value = "";
-      const token = useCookie("access_token").value;
-
-      const response = await $fetch("/api/v1/ai/agents/start", {
-        method: "POST",
-        baseURL: useRuntimeConfig().public.apiBase,
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      currentSession.value = response as AgentSession;
-      return response;
-    }
-    catch (e: any) {
-      error.value = e.message || "Erreur lors du démarrage de la session";
-      throw e;
-    }
-    finally {
-      isLoading.value = false;
-    }
-  };
-
-  // Récupérer toutes les sessions de l'utilisateur
-  const listSessions = async () => {
-    try {
-      isLoading.value = true;
-      error.value = "";
-      const token = useCookie("access_token").value;
-
-      const response = await $fetch("/api/v1/ai/agents/sessions", {
-        baseURL: useRuntimeConfig().public.apiBase,
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      currentSession.value = {
+        task_id: response.task_id,
+        agent_type: agentType,
+        status: response.status,
+        result: null,
+        error: null,
+      };
 
       return response;
     }
-    catch (e: any) {
-      error.value = e.message || "Erreur lors de la récupération des sessions";
-      throw e;
+    catch (error: any) {
+      currentSession.value.error = error?.message || "Erreur lors du démarrage de l'agent";
+      throw error;
     }
-    finally {
-      isLoading.value = false;
-    }
-  };
+  }
 
-  // Récupérer l'état d'une session spécifique
-  const getSessionState = async (sessionId: string) => {
+  /**
+   * Vérifie le statut d'une tâche agent
+   * @param taskId - ID de la tâche
+   */
+  async function checkAgentStatus(taskId: string) {
     try {
-      isLoading.value = true;
-      error.value = "";
-      const token = useCookie("access_token").value;
+      const response = await api.ai.getAgentTaskStatus(taskId);
 
-      const response = await $fetch(`/api/v1/ai/agents/sessions/${sessionId}`, {
-        baseURL: useRuntimeConfig().public.apiBase,
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      currentSession.value.status = response.state || response.status;
 
-      return response;
-    }
-    catch (e: any) {
-      error.value = e.message || "Erreur lors de la récupération de l'état";
-      throw e;
-    }
-    finally {
-      isLoading.value = false;
-    }
-  };
-
-  // Supprimer une session
-  const deleteSession = async (sessionId: string) => {
-    try {
-      isLoading.value = true;
-      error.value = "";
-      const token = useCookie("access_token").value;
-
-      await $fetch(`/api/v1/ai/agents/sessions/${sessionId}`, {
-        method: "DELETE",
-        baseURL: useRuntimeConfig().public.apiBase,
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (currentSession.value?.session_id === sessionId) {
-        currentSession.value = null;
-        sessionHistory.value = [];
+      if (response.result) {
+        currentSession.value.result = response.result;
       }
-    }
-    catch (e: any) {
-      error.value = e.message || "Erreur lors de la suppression de la session";
-      throw e;
-    }
-    finally {
-      isLoading.value = false;
-    }
-  };
 
-  // Soumettre des réponses à une session
-  const submitResponses = async (sessionId: string, responses: any[]) => {
+      if (response.error) {
+        currentSession.value.error = response.error;
+      }
+
+      return response;
+    }
+    catch (error: any) {
+      currentSession.value.error = error?.message || "Erreur lors de la vérification du statut";
+      throw error;
+    }
+  }
+
+  /**
+   * Polling automatique d'une tâche jusqu'à complétion
+   * @param taskId - ID de la tâche
+   * @param onProgress - Callback appelé à chaque poll
+   * @param maxAttempts - Nombre maximal de tentatives
+   * @param intervalMs - Intervalle entre les polls en ms
+   */
+  async function pollAgentTask(
+    taskId: string,
+    onProgress?: (status: any) => void,
+    maxAttempts: number = 60,
+    intervalMs: number = 2000,
+  ) {
+    let attempts = 0;
+
+    return new Promise((resolve, reject) => {
+      const intervalId = setInterval(async () => {
+        attempts++;
+
+        try {
+          const status = await checkAgentStatus(taskId);
+
+          if (onProgress) {
+            onProgress(status);
+          }
+
+          // États terminaux
+          if (status.state === "SUCCESS" || status.status === "success") {
+            clearInterval(intervalId);
+            resolve(status.result);
+          }
+          else if (status.state === "FAILURE" || status.status === "failed") {
+            clearInterval(intervalId);
+            reject(new Error(status.error || "Tâche échouée"));
+          }
+          else if (attempts >= maxAttempts) {
+            clearInterval(intervalId);
+            reject(new Error("Timeout: tâche non terminée après max tentatives"));
+          }
+        }
+        catch (error) {
+          clearInterval(intervalId);
+          reject(error);
+        }
+      }, intervalMs);
+    });
+  }
+
+  /**
+   * Reset la session en cours
+   */
+  function resetSession() {
+    currentSession.value = {
+      task_id: null,
+      agent_type: null,
+      status: null,
+      result: null,
+      error: null,
+    };
+  }
+
+  // Chat avec l'IA
+  const chatHistory = ref<Array<{
+    role: "user" | "assistant";
+    content: string;
+    timestamp: string;
+  }>>([]);
+  const isLoading = ref(false);
+  const error = ref<string | null>(null);
+
+  async function sendChatMessage(message: string, sessionId?: string) {
+    isLoading.value = true;
+    error.value = null;
+
     try {
-      isLoading.value = true;
-      error.value = "";
-      const token = useCookie("access_token").value;
+      const response = await api.ai.chat(message, sessionId);
 
-      const response = await $fetch(`/api/v1/ai/agents/sessions/${sessionId}/responses`, {
-        method: "POST",
-        baseURL: useRuntimeConfig().public.apiBase,
-        headers: {
-          Authorization: `Bearer ${token}`,
+      chatHistory.value.push(
+        {
+          role: "user",
+          content: message,
+          timestamp: new Date().toISOString(),
         },
-        body: responses,
-      });
+        {
+          role: "assistant",
+          content: response.response,
+          timestamp: response.timestamp,
+        },
+      );
 
       return response;
     }
     catch (e: any) {
-      error.value = e.message || "Erreur lors de la soumission des réponses";
+      error.value = e?.message || "Erreur lors de l'envoi du message";
       throw e;
     }
     finally {
       isLoading.value = false;
     }
-  };
+  }
 
-  // Récupérer l'historique de conversation
-  const getConversationHistory = async (sessionId: string) => {
+  async function loadChatHistory(sessionId?: string, limit: number = 50) {
+    isLoading.value = true;
+    error.value = null;
+
     try {
-      isLoading.value = true;
-      error.value = "";
-      const token = useCookie("access_token").value;
-
-      const response = await $fetch(`/api/v1/ai/agents/sessions/${sessionId}/history`, {
-        baseURL: useRuntimeConfig().public.apiBase,
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      sessionHistory.value = response as ConversationMessage[];
-      return response;
+      const history = await api.ai.getChatHistory(sessionId, limit);
+      if (history?.conversation && Array.isArray(history.conversation.messages)) {
+        chatHistory.value = history.conversation.messages;
+      }
+      else if (history?.conversations && Array.isArray(history.conversations)) {
+        // Merge all conversations
+        chatHistory.value = history.conversations.flatMap((conv: any) => conv.messages || []);
+      }
+      else {
+        // Aucun historique, initialiser à un tableau vide
+        chatHistory.value = [];
+      }
+      return history;
     }
     catch (e: any) {
-      error.value = e.message || "Erreur lors de la récupération de l'historique";
-      throw e;
+      error.value = e?.message || "Erreur lors du chargement de l'historique";
+      console.error("Erreur loadChatHistory:", e);
+      // Initialiser à un tableau vide en cas d'erreur
+      chatHistory.value = [];
+      // Ne pas throw, juste log l'erreur
+      return null;
     }
     finally {
       isLoading.value = false;
     }
-  };
+  }
 
-  // Envoyer un message dans une session
-  const sendMessage = async (sessionId: string, content: string) => {
-    try {
-      isLoading.value = true;
-      error.value = "";
-      const token = useCookie("access_token").value;
+  // Génération de cours
+  async function generateCourse(topic: string, durationWeeks: number = 6) {
+    return await api.ai.generateCourseRoadmap(topic, durationWeeks);
+  }
 
-      const response = await $fetch(`/api/v1/ai/agents/sessions/${sessionId}/message`, {
-        method: "POST",
-        baseURL: useRuntimeConfig().public.apiBase,
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-        body: { content },
-      });
+  async function getCourse(courseId: string) {
+    return await api.ai.getCourse(courseId);
+  }
 
-      // Ajouter le message à l'historique local
-      sessionHistory.value.push({
-        role: "user",
-        content,
-        timestamp: new Date().toISOString(),
-      });
+  async function searchCourses(tags?: string, niveau?: string) {
+    return await api.ai.searchCourses(tags, niveau);
+  }
 
-      return response;
-    }
-    catch (e: any) {
-      error.value = e.message || "Erreur lors de l'envoi du message";
-      throw e;
-    }
-    finally {
-      isLoading.value = false;
-    }
-  };
+  // Progression
+  async function getAllProgressions() {
+    return await api.ai.getAllProgressions();
+  }
 
-  // Récupérer le résumé d'une session
-  const getSessionSummary = async (sessionId: string) => {
-    try {
-      isLoading.value = true;
-      error.value = "";
-      const token = useCookie("access_token").value;
+  async function completeModule(courseId: string, moduleId: string, score: number, timeSpent: number) {
+    return await api.ai.completeModule(courseId, moduleId, score, timeSpent);
+  }
 
-      const response = await $fetch(`/api/v1/ai/agents/sessions/${sessionId}/summary`, {
-        baseURL: useRuntimeConfig().public.apiBase,
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+  async function completeLesson(courseId: string, lessonId: string, timeSpent: number) {
+    return await api.ai.completeLesson(courseId, lessonId, timeSpent);
+  }
 
-      return response;
-    }
-    catch (e: any) {
-      error.value = e.message || "Erreur lors de la récupération du résumé";
-      throw e;
-    }
-    finally {
-      isLoading.value = false;
-    }
-  };
+  // Learning path
+  async function getLearningPath() {
+    return await api.ai.getLearningPath();
+  }
+
+  async function completeQuest(questId: string, xpEarned: number = 100) {
+    return await api.ai.completeQuest(questId, xpEarned);
+  }
+
+  // Ressources
+  async function recommendResources(topic: string, resourceType: string = "all") {
+    return await api.ai.recommendResources(topic, resourceType);
+  }
 
   return {
-    // État
-    currentSession,
-    sessionHistory,
-    isLoading,
-    error,
+    // Session state
+    currentSession: readonly(currentSession),
+    isProcessing,
 
-    // Méthodes
-    listAgents,
-    startSession,
-    listSessions,
-    getSessionState,
-    deleteSession,
-    submitResponses,
-    getConversationHistory,
-    sendMessage,
-    getSessionSummary,
+    // Session management
+    startAgentSession,
+    checkAgentStatus,
+    pollAgentTask,
+    resetSession,
+
+    // Chat
+    chatHistory: readonly(chatHistory),
+    isLoading: readonly(isLoading),
+    error: readonly(error),
+    sendChatMessage,
+    loadChatHistory,
+
+    // Courses
+    generateCourse,
+    getCourse,
+    searchCourses,
+
+    // Progression
+    getAllProgressions,
+    completeModule,
+    completeLesson,
+
+    // Learning path
+    getLearningPath,
+    completeQuest,
+
+    // Resources
+    recommendResources,
   };
 }

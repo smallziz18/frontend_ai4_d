@@ -134,17 +134,22 @@ export function useQuestionnaire() {
 
   // Générer les résultats d'évaluation
   const generateEvaluationResult = (): QuestionnaireResult => {
-    const questionsList = questions.value || [];
+    const questionsList = (questions.value || []).filter((q): q is Question => Boolean(q));
     const evaluationData: Answer[] = [];
 
     for (let i = 0; i < questionsList.length; i++) {
-      const q = questionsList[i];
+      const q = questionsList[i]!; // ! car on a filtré les undefined
       const qKey = `q_${i}`;
       const userAnswer = answers.value[qKey] || "";
 
       // Déterminer si la réponse est correcte
       let isCorrect: boolean | string = false;
-      if (q.type === "QuestionOuverte" || q.type === "ListeOuverte") {
+
+      // Si pas de réponse, marquer comme "Non répondu"
+      if (!userAnswer || userAnswer.trim() === "") {
+        isCorrect = "Non répondu";
+      }
+      else if (q.type === "QuestionOuverte" || q.type === "ListeOuverte") {
         isCorrect = "Non évalué (requiert une analyse humaine)";
       }
       else {
@@ -152,9 +157,10 @@ export function useQuestionnaire() {
         if (Array.isArray(correctAnswer)) {
           isCorrect = correctAnswer.includes(userAnswer);
         }
-        else if (typeof correctAnswer === "string") {
+        else {
           // Vérifier si la réponse commence par la lettre de la correction (A, B, C, D)
-          isCorrect = userAnswer && userAnswer.trim().startsWith(correctAnswer.split(" ")[0]);
+          const firstLetter = correctAnswer.split(" ")[0];
+          isCorrect = !!userAnswer && userAnswer.trim().startsWith(firstLetter);
         }
       }
 
@@ -171,7 +177,11 @@ export function useQuestionnaire() {
 
     // Calculer le score
     const score = evaluationData.filter(item => item.is_correct === true).length;
-    const total = evaluationData.filter(item => item.is_correct !== "Non évalué (requiert une analyse humaine)").length;
+    // Exclure les questions non évaluables ET non répondues du calcul du total
+    const total = evaluationData.filter(item =>
+      item.is_correct !== "Non évalué (requiert une analyse humaine)"
+      && item.is_correct !== "Non répondu",
+    ).length;
 
     return {
       score: `${score}/${total}`,
@@ -187,19 +197,30 @@ export function useQuestionnaire() {
     evaluationResult.value = result;
     quizCompleted.value = true;
 
+    console.warn("📤 Soumission du questionnaire avec résultats:", {
+      score: result.score,
+      score_percentage: result.score_percentage,
+      questions_answered: result.questions_data.filter(q => q.is_correct !== "Non répondu").length,
+      total_questions: result.questions_data.length,
+    });
+
     // Envoyer les résultats au backend pour analyse
     try {
-      const data = await api.questionnaire.analyzeQuiz(result);
+      const response = await api.questionnaire.analyzeQuiz(result);
 
-      if (data?.task_id) {
+      console.warn("📥 Réponse du backend:", response);
+
+      if (response?.task_id) {
+        console.warn(`✅ Task d'analyse créé: ${response.task_id}`);
         // Retourner le task_id de l'analyse pour pouvoir vérifier son statut
-        return { result, analysisTaskId: data.task_id };
+        return { result, analysisTaskId: response.task_id };
       }
 
-      return { result, analysisTaskId: null };
+      console.error("❌ Aucun task_id retourné par le backend");
+      throw new Error("Le backend n'a pas retourné de task_id pour l'analyse");
     }
     catch (e: any) {
-      console.error("Erreur submitQuestionnaire:", e);
+      console.error("❌ Erreur submitQuestionnaire:", e);
       throw e;
     }
   };

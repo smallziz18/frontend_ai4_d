@@ -3,90 +3,195 @@ definePageMeta({
   middleware: ["auth"],
 });
 
-// Données simulées des cours (à remplacer par des vraies données de l'API)
-const courses = ref([
-  {
-    id: 1,
-    title: "Introduction à l'Intelligence Artificielle",
-    description: "Découvrez les fondamentaux de l'IA et du Machine Learning",
-    level: "Débutant",
-    duration: "4 semaines",
-    modules: 8,
-    enrolled: false,
-    progress: 0,
-    image: "tabler:brain",
-    color: "primary",
-    tags: ["IA", "ML", "Débutant"],
-  },
-  {
-    id: 2,
-    title: "Réseaux de Neurones Profonds",
-    description: "Maîtrisez les architectures de deep learning modernes",
-    level: "Intermédiaire",
-    duration: "6 semaines",
-    modules: 12,
-    enrolled: true,
-    progress: 45,
-    image: "tabler:network",
-    color: "secondary",
-    tags: ["Deep Learning", "Neural Networks"],
-  },
-  {
-    id: 3,
-    title: "Traitement du Langage Naturel",
-    description: "Apprenez à traiter et comprendre le langage humain",
-    level: "Intermédiaire",
-    duration: "5 semaines",
-    modules: 10,
-    enrolled: false,
-    progress: 0,
-    image: "tabler:message-language",
-    color: "accent",
-    tags: ["NLP", "Transformers", "LLM"],
-  },
-  {
-    id: 4,
-    title: "Vision par Ordinateur",
-    description: "Maîtrisez le traitement d'images et la reconnaissance visuelle",
-    level: "Avancé",
-    duration: "8 semaines",
-    modules: 15,
-    enrolled: false,
-    progress: 0,
-    image: "tabler:camera",
-    color: "success",
-    tags: ["Computer Vision", "CNN", "Image Processing"],
-  },
-  {
-    id: 5,
-    title: "IA Générative et GANs",
-    description: "Créez des contenus avec les modèles génératifs",
-    level: "Avancé",
-    duration: "6 semaines",
-    modules: 12,
-    enrolled: false,
-    progress: 0,
-    image: "tabler:wand",
-    color: "warning",
-    tags: ["GAN", "Diffusion", "Génératif"],
-  },
-  {
-    id: 6,
-    title: "Apprentissage par Renforcement",
-    description: "Entraînez des agents intelligents par essai-erreur",
-    level: "Avancé",
-    duration: "7 semaines",
-    modules: 14,
-    enrolled: true,
-    progress: 20,
-    image: "tabler:robot",
-    color: "error",
-    tags: ["RL", "Q-Learning", "Policy Gradient"],
-  },
-]);
+const { getAllProgressions, getActiveRoadmap, isLoading } = useCourses();
+const toast = useToast();
 
+// États
+const courses = ref<any[]>([]);
+const roadmap = ref<any>(null);
 const selectedFilter = ref("all");
 const searchQuery = ref("");
+const isGeneratingCourse = ref(false);
+const showGenerateModal = ref(false);
+const newCourseTopic = ref("");
+const newCourseDuration = ref(6);
+
+// Charger les cours au montage
+onMounted(async () => {
+  await loadCourses();
+});
+
+/**
+ * Charger les cours depuis l'API
+ */
+async function loadCourses() {
+  try {
+    // Récupérer la roadmap active
+    const roadmapResult = await getActiveRoadmap();
+
+    // Récupérer toutes les progressions
+    const progressionsResult = await getAllProgressions();
+
+    if (roadmapResult.success && roadmapResult.data?.roadmap) {
+      // Mapper les modules de la roadmap en cours
+      roadmap.value = roadmapResult.data.roadmap;
+      const progressions = progressionsResult.success ? progressionsResult.data?.progressions || [] : [];
+
+      courses.value = roadmap.value.modules?.map((module: any, index: number) => {
+        // Trouver la progression correspondante
+        const progression = progressions.find((p: any) => p.course_id === roadmap.value.course_id);
+        const moduleProgress = progression?.modules_completed?.includes(module.id) ? 100 : 0;
+
+        return {
+          id: module.id || `module_${index}`,
+          title: module.titre || module.title || `Module ${index + 1}`,
+          description: module.description || "Description du module",
+          level: mapLevel(module.niveau || roadmap.value.niveau || "Débutant"),
+          duration: module.duree_estimee || module.duree_totale || `${module.semaines || 2} semaines`,
+          modules: module.ressources?.length || module.lecons?.length || module.lessons?.length || 5,
+          enrolled: !!progression,
+          progress: moduleProgress,
+          image: getModuleIcon(module.titre || module.title),
+          color: getModuleColor(index),
+          tags: module.tags || extractTags(module.titre || module.title || ""),
+        };
+      }) || [];
+    }
+
+    // Si pas de roadmap, afficher un message
+    if (courses.value.length === 0) {
+      toast.add({
+        title: "Aucun cours disponible",
+        description: "Générez votre roadmap personnalisée pour commencer !",
+        color: "info",
+      });
+    }
+  }
+  catch (error: any) {
+    console.error("Erreur lors du chargement des cours:", error);
+    toast.add({
+      title: "Erreur",
+      description: "Impossible de charger les cours",
+      color: "error",
+    });
+  }
+}
+
+/**
+ * Mapper le niveau
+ */
+function mapLevel(level: string): string {
+  const levelMap: Record<string, string> = {
+    débutant: "Débutant",
+    beginner: "Débutant",
+    intermédiaire: "Intermédiaire",
+    intermediate: "Intermédiaire",
+    avancé: "Avancé",
+    advanced: "Avancé",
+  };
+  return levelMap[level.toLowerCase()] || level;
+}
+
+/**
+ * Obtenir l'icône du module
+ */
+function getModuleIcon(title: string): string {
+  const lowerTitle = title.toLowerCase();
+  if (lowerTitle.includes("réseau") || lowerTitle.includes("neural"))
+    return "tabler:network";
+  if (lowerTitle.includes("vision") || lowerTitle.includes("image"))
+    return "tabler:camera";
+  if (lowerTitle.includes("nlp") || lowerTitle.includes("langage") || lowerTitle.includes("language"))
+    return "tabler:message-language";
+  if (lowerTitle.includes("génératif") || lowerTitle.includes("gan") || lowerTitle.includes("generative"))
+    return "tabler:wand";
+  if (lowerTitle.includes("renforcement") || lowerTitle.includes("reinforcement"))
+    return "tabler:robot";
+  return "tabler:brain";
+}
+
+/**
+ * Obtenir la couleur du module
+ */
+function getModuleColor(index: number): string {
+  const colors = ["primary", "secondary", "accent", "success", "warning", "error"];
+  return colors[index % colors.length];
+}
+
+/**
+ * Extraire les tags du titre
+ */
+function extractTags(title: string): string[] {
+  const tags: string[] = [];
+  const lowerTitle = title.toLowerCase();
+
+  if (lowerTitle.includes("ia") || lowerTitle.includes("ai"))
+    tags.push("IA");
+  if (lowerTitle.includes("ml") || lowerTitle.includes("machine learning"))
+    tags.push("ML");
+  if (lowerTitle.includes("deep learning"))
+    tags.push("Deep Learning");
+  if (lowerTitle.includes("nlp"))
+    tags.push("NLP");
+  if (lowerTitle.includes("cnn") || lowerTitle.includes("vision"))
+    tags.push("Computer Vision");
+  if (lowerTitle.includes("gan"))
+    tags.push("GAN");
+  if (lowerTitle.includes("transformer"))
+    tags.push("Transformers");
+
+  return tags.length > 0 ? tags : ["IA"];
+}
+
+/**
+ * Générer un nouveau cours avec l'IA
+ */
+async function generateNewCourse() {
+  if (!newCourseTopic.value.trim()) {
+    toast.add({
+      title: "Erreur",
+      description: "Veuillez entrer un sujet de cours",
+      color: "error",
+    });
+    return;
+  }
+
+  isGeneratingCourse.value = true;
+
+  try {
+    const { generateCourse } = useCourses();
+    const result = await generateCourse(newCourseTopic.value, newCourseDuration.value);
+
+    if (result.success) {
+      toast.add({
+        title: "Cours généré !",
+        description: "Votre nouveau cours a été créé avec succès",
+        color: "success",
+      });
+
+      showGenerateModal.value = false;
+      newCourseTopic.value = "";
+      await loadCourses();
+    }
+    else {
+      toast.add({
+        title: "Erreur",
+        description: result.error || "Impossible de générer le cours",
+        color: "error",
+      });
+    }
+  }
+  catch {
+    toast.add({
+      title: "Erreur",
+      description: "Une erreur s'est produite lors de la génération",
+      color: "error",
+    });
+  }
+  finally {
+    isGeneratingCourse.value = false;
+  }
+}
 
 // Filtrer les cours
 const filteredCourses = computed(() => {
@@ -172,32 +277,43 @@ function getLevelBadgeColor(level: string) {
         </p>
       </div>
 
-      <!-- Stats -->
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-        <stat-card
-          title="Cours Disponibles"
-          icon="tabler:book"
-          :value="stats.total"
-          color="primary"
-        />
-        <stat-card
-          title="Mes Cours"
-          icon="tabler:book-open"
-          :value="stats.enrolled"
-          color="secondary"
-        />
-        <stat-card
-          title="En Cours"
-          icon="tabler:progress"
-          :value="stats.inProgress"
-          color="warning"
-        />
-        <stat-card
-          title="Terminés"
-          icon="tabler:check-circle"
-          :value="stats.completed"
-          color="success"
-        />
+      <!-- Stats et Bouton Génération -->
+      <div class="flex flex-col md:flex-row gap-4 mb-8">
+        <div class="flex-1 grid grid-cols-2 md:grid-cols-4 gap-4">
+          <stat-card
+            title="Cours Disponibles"
+            icon="tabler:book"
+            :value="stats.total"
+            color="primary"
+          />
+          <stat-card
+            title="Mes Cours"
+            icon="tabler:book-open"
+            :value="stats.enrolled"
+            color="secondary"
+          />
+          <stat-card
+            title="En Cours"
+            icon="tabler:progress"
+            :value="stats.inProgress"
+            color="warning"
+          />
+          <stat-card
+            title="Terminés"
+            icon="tabler:check-circle"
+            :value="stats.completed"
+            color="success"
+          />
+        </div>
+
+        <!-- Bouton Générer un Cours -->
+        <button
+          class="btn btn-primary gap-2"
+          @click="showGenerateModal = true"
+        >
+          <Icon name="tabler:sparkles" size="20" />
+          Générer un Cours IA
+        </button>
       </div>
 
       <!-- Filters and Search -->
@@ -345,19 +461,21 @@ function getLevelBadgeColor(level: string) {
 
             <!-- Actions -->
             <div class="card-actions justify-end">
-              <button
-                v-if="!course.enrolled"
-                class="btn btn-primary btn-sm"
-              >
-                <Icon name="tabler:plus" size="16" />
-                S'inscrire
-              </button>
-              <button
-                v-else
+              <NuxtLink
+                v-if="course.enrolled && roadmap?.course_id"
+                :to="`/courses/${roadmap.course_id}/module/${course.id}`"
                 class="btn btn-primary btn-sm"
               >
                 <Icon name="tabler:arrow-right" size="16" />
-                Continuer
+                Commencer
+              </NuxtLink>
+              <button
+                v-else
+                class="btn btn-outline btn-sm"
+                @click="toast.add({ title: 'Bientôt disponible', description: 'Cette fonctionnalité sera disponible prochainement', color: 'info' })"
+              >
+                <Icon name="tabler:lock" size="16" />
+                Verrouillé
               </button>
             </div>
           </div>
@@ -366,7 +484,7 @@ function getLevelBadgeColor(level: string) {
 
       <!-- Empty State -->
       <div
-        v-if="filteredCourses.length === 0"
+        v-if="filteredCourses.length === 0 && !isLoading"
         class="card bg-base-100 shadow-xl"
       >
         <div class="card-body text-center py-16">
@@ -378,11 +496,93 @@ function getLevelBadgeColor(level: string) {
           <h3 class="text-2xl font-semibold mb-2">
             Aucun cours trouvé
           </h3>
-          <p class="opacity-70">
-            Essayez de modifier vos filtres ou votre recherche
+          <p class="opacity-70 mb-4">
+            Essayez de modifier vos filtres ou générez votre roadmap personnalisée
           </p>
+          <button
+            class="btn btn-primary gap-2"
+            @click="$router.push('/dashboard')"
+          >
+            <Icon name="tabler:route" size="20" />
+            Générer ma Roadmap
+          </button>
         </div>
       </div>
+
+      <!-- Loading State -->
+      <div
+        v-if="isLoading"
+        class="flex justify-center items-center py-16"
+      >
+        <loading-spinner size="lg" />
+      </div>
+    </div>
+
+    <!-- Modal Génération de Cours -->
+    <div
+      v-if="showGenerateModal"
+      class="modal modal-open"
+    >
+      <div class="modal-box">
+        <h3 class="font-bold text-lg mb-4">
+          🤖 Générer un Cours avec l'IA
+        </h3>
+
+        <div class="form-control mb-4">
+          <label class="label">
+            <span class="label-text">Sujet du cours</span>
+          </label>
+          <input
+            v-model="newCourseTopic"
+            type="text"
+            placeholder="Ex: Transformers en NLP, GANs, etc."
+            class="input input-bordered"
+          >
+        </div>
+
+        <div class="form-control mb-6">
+          <label class="label">
+            <span class="label-text">Durée (semaines)</span>
+          </label>
+          <input
+            v-model.number="newCourseDuration"
+            type="number"
+            min="2"
+            max="16"
+            class="input input-bordered"
+          >
+        </div>
+
+        <div class="modal-action">
+          <button
+            class="btn"
+            :disabled="isGeneratingCourse"
+            @click="showGenerateModal = false"
+          >
+            Annuler
+          </button>
+          <button
+            class="btn btn-primary gap-2"
+            :disabled="isGeneratingCourse"
+            @click="generateNewCourse"
+          >
+            <Icon
+              v-if="!isGeneratingCourse"
+              name="tabler:sparkles"
+              size="20"
+            />
+            <span
+              v-if="isGeneratingCourse"
+              class="loading loading-spinner loading-sm"
+            />
+            {{ isGeneratingCourse ? "Génération..." : "Générer" }}
+          </button>
+        </div>
+      </div>
+      <div
+        class="modal-backdrop"
+        @click="showGenerateModal = false"
+      />
     </div>
   </div>
 </template>

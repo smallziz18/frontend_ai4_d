@@ -3,6 +3,10 @@ import { onMounted, ref } from "vue";
 
 import { useSignup } from "~/composables/use-signup";
 
+definePageMeta({
+  layout: "empty",
+});
+
 const { signupProfesseur, baseData } = useSignup();
 
 const techLevel = ref(7);

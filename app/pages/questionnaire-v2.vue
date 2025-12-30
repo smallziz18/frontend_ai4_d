@@ -1,493 +1,239 @@
 <script setup lang="ts">
-import { useProfile } from "~/composables/use-profile";
 import { useQuestionnaireV2 } from "~/composables/use-questionnaire-v2";
-import { useAuth } from "~/data/use-auth";
 
 definePageMeta({
   middleware: ["auth"],
+  layout: "empty",
 });
 
-const { user } = useAuth();
-const { hasProfile, invalidateHasProfileCache } = useProfile();
-const {
-  session,
-  currentQuestion,
-  currentQuestionIndex,
-  answers,
-  analysisResult,
-  loading,
-  quizCompleted,
-  progress,
-  answeredCount,
-  totalQuestions,
-  allQuestionsAnswered,
-  generateQuestionnaire,
-  submitResponses,
-  nextQuestion,
-  previousQuestion,
-  setAnswer,
-  reset,
-} = useQuestionnaireV2();
+// Keep only the properties used in this page
+const { session, currentQuestionIndex, answers, generateQuestionnaire, submitResponses, nextQuestion, previousQuestion, allQuestionsAnswered, loading } = useQuestionnaireV2();
 
-const error = ref("");
-const showingResults = ref(false);
+const router = useRouter();
+const pageError = ref("");
+const submitting = ref(false);
 
-// Lancer la génération au montage
 onMounted(async () => {
-  // Vérifier l'authentification
   const accessToken = useCookie("access_token");
   if (!accessToken.value) {
     await navigateTo("/login");
     return;
   }
 
-  // Vérifier si on a été redirigé ici depuis le dashboard
-  const redirectedFromDashboard = sessionStorage.getItem("redirected_to_questionnaire");
+  // ✅ Vérifier si l'utilisateur a déjà un profil
+  const profileModule = await import("~/composables/use-profile");
+  const { hasProfile } = profileModule.useProfile();
+  const alreadyHasProfile = await hasProfile();
 
-  // Vérifier si l'utilisateur a déjà un profil
-  const profileExists = await hasProfile();
-
-  if (profileExists && !redirectedFromDashboard) {
-    // L'utilisateur a déjà un profil ET n'a pas été redirigé
-    // → rediriger vers le dashboard
-    console.warn("Profil existe déjà, redirection vers dashboard");
+  if (alreadyHasProfile) {
+    // L'utilisateur a déjà complété le questionnaire, rediriger vers le dashboard
     await navigateTo("/dashboard");
     return;
   }
 
-  // Nettoyer le flag
-  if (redirectedFromDashboard) {
-    sessionStorage.removeItem("redirected_to_questionnaire");
-  }
-
-  // Générer le questionnaire si pas déjà fait
-  if (!session.value && !quizCompleted.value) {
+  // Générer si pas de session
+  if (!session.value) {
     await startGeneration();
   }
 });
 
 async function startGeneration() {
   try {
-    error.value = "";
+    pageError.value = "";
     await generateQuestionnaire();
   }
   catch (e: any) {
-    error.value = e.message || "Erreur lors de la génération du questionnaire";
+    console.error("Erreur lors de la génération des questions:", e);
+    pageError.value = e.message || "Erreur lors de la génération des questions";
   }
 }
 
-function handlePrevious() {
-  previousQuestion();
-}
-
-function handleNext() {
-  nextQuestion();
+function getAnswerKey(index: number) {
+  return `q_${index}`;
 }
 
 async function handleSubmit() {
-  try {
-    error.value = "";
-    await submitResponses();
-    showingResults.value = true;
-
-    // IMPORTANT : Invalider le cache du profil pour forcer un rechargement
-    // Le backend vient de créer le profil MongoDB, on doit le récupérer
-    invalidateHasProfileCache();
-  }
-  catch (e: any) {
-    error.value = e.message || "Erreur lors de la soumission";
-  }
-}
-
-function handleRetry() {
-  reset();
-  error.value = "";
-  showingResults.value = false;
-  startGeneration();
-}
-
-async function goToDashboard() {
-  // Nettoyer l'état du questionnaire pour éviter la boucle
-  reset(); // Reset le questionnaire
-
-  // Invalider le cache du profil
-  invalidateHasProfileCache();
-
-  // Attendre un peu pour laisser le backend sauvegarder le profil
-  await new Promise(resolve => setTimeout(resolve, 500));
-
-  // Vérifier que le profil existe maintenant
-  const profileExists = await hasProfile();
-
-  if (!profileExists) {
-    // Si le profil n'existe toujours pas, afficher une erreur
-    error.value = "Le profil n'a pas pu être créé. Veuillez réessayer ou contacter le support.";
-    console.error("Le profil n'existe pas après la soumission du questionnaire");
+  if (!allQuestionsAnswered.value) {
+    pageError.value = "Veuillez répondre à au moins une question avant de soumettre.";
     return;
   }
 
-  // Marquer qu'on vient du questionnaire pour éviter la boucle
-  sessionStorage.setItem("from_questionnaire", "true");
+  try {
+    submitting.value = true;
+    pageError.value = "";
 
-  // Rediriger vers le dashboard
-  await navigateTo("/dashboard");
+    // ✅ Soumettre les réponses et créer le profil
+    await submitResponses();
+
+    // ✅ Invalider le cache pour forcer la vérification du profil
+    const { invalidateHasProfileCache } = await import("~/composables/use-profile");
+    invalidateHasProfileCache();
+
+    // Marquer qu'on vient du questionnaire
+    sessionStorage.setItem("from_questionnaire", "true");
+
+    // Rediriger vers le dashboard
+    await router.push("/dashboard");
+  }
+  catch (e: any) {
+    console.error("Erreur lors de l'envoi:", e);
+    pageError.value = e.message || "Erreur lors de la soumission du questionnaire";
+  }
+  finally {
+    submitting.value = false;
+  }
 }
 
-// Fonction pour obtenir la clé de la question actuelle
-const currentQuestionKey = computed(() => {
-  if (!currentQuestion.value)
-    return "";
-  return `q_${currentQuestion.value.numero - 1}`;
-});
-
-// Réponse de l'utilisateur pour la question actuelle
-const currentAnswer = computed({
-  get: () => answers.value[currentQuestionKey.value] || "",
-  set: (value: string) => {
-    setAnswer(currentQuestionKey.value, value);
-  },
-});
-
-// Options de la question actuelle (avec fallback pour VraiOuFaux)
-const currentQuestionOptions = computed(() => {
-  if (!currentQuestion.value)
-    return [];
-
-  // Si la question a déjà des options, les utiliser
-  if (currentQuestion.value.options && currentQuestion.value.options.length > 0) {
-    return currentQuestion.value.options;
-  }
-
-  // Si c'est VraiOuFaux et pas d'options, utiliser les options par défaut
-  if (currentQuestion.value.type === "VraiOuFaux") {
-    return ["A. Vrai", "B. Faux"];
-  }
-
-  return [];
-});
-
-// Calculer le niveau et la couleur du badge
-const levelInfo = computed(() => {
-  if (!analysisResult.value)
-    return { text: "En attente", color: "badge-ghost" };
-
-  const niveau = analysisResult.value.niveau_final;
-  if (niveau >= 8)
-    return { text: `Expert (${niveau}/10)`, color: "badge-success" };
-  if (niveau >= 6)
-    return { text: `Avancé (${niveau}/10)`, color: "badge-info" };
-  if (niveau >= 4)
-    return { text: `Intermédiaire (${niveau}/10)`, color: "badge-warning" };
-  return { text: `Débutant (${niveau}/10)`, color: "badge-error" };
-});
+function ensureRadioName(index: number) {
+  return `question_${index}`; // unique name per question
+}
 </script>
 
 <template>
-  <div class="min-h-screen bg-gradient-to-br from-primary/5 via-background-light to-secondary/5 dark:from-primary/10 dark:via-background-dark dark:to-secondary/10">
-    <!-- Navbar simplifiée -->
-    <div class="navbar bg-base-100/80 backdrop-blur-sm shadow-sm sticky top-0 z-50">
-      <div class="flex-1">
-        <div class="flex items-center gap-2 text-primary dark:text-secondary px-4">
-          <Icon name="tabler:school" size="32" />
-          <h2 class="text-xl font-bold">
-            AI-Edu
-          </h2>
+  <div class="min-h-screen bg-background-light dark:bg-background-dark">
+    <div class="container mx-auto px-4 py-12">
+      <div class="max-w-3xl mx-auto">
+        <div class="text-center mb-8">
+          <h1 class="text-3xl font-bold">
+            Questionnaire de Profilage
+          </h1>
+          <p class="text-sm text-gray-600 dark:text-gray-400 mb-2">
+            Répondez aux questions pour personnaliser votre expérience d'apprentissage
+          </p>
+          <p class="text-xs text-primary">
+            💡 Les questions sont optionnelles - répondez seulement à celles que vous connaissez
+          </p>
         </div>
-      </div>
-      <div class="flex-none">
-        <!-- Theme Toggle -->
-        <ThemeToggle />
 
-        <p class="text-sm font-semibold mr-4">
-          {{ user?.username }}
-        </p>
-      </div>
-    </div>
+        <div v-if="pageError" class="alert alert-error mb-6">
+          <div>{{ pageError }}</div>
+          <button class="btn btn-sm btn-ghost" @click="startGeneration">
+            Réessayer
+          </button>
+        </div>
 
-    <div class="container mx-auto px-4 py-8 max-w-4xl">
-      <!-- Erreur -->
-      <div v-if="error" class="alert alert-error mb-6">
-        <Icon name="tabler:alert-circle" size="24" />
-        <span>{{ error }}</span>
-        <button class="btn btn-sm btn-ghost" @click="handleRetry">
-          Réessayer
-        </button>
-      </div>
+        <div v-if="!session && loading" class="card p-6 text-center">
+          <div class="loading loading-dots" />
+          <p class="mt-4">
+            Génération en cours...
+          </p>
+        </div>
 
-      <!-- Chargement initial -->
-      <div v-if="loading && !session" class="flex flex-col items-center justify-center min-h-[60vh] gap-4">
-        <span class="loading loading-spinner loading-lg text-primary" />
-        <p class="text-lg font-medium">
-          🤖 L'IA prépare vos questions personnalisées...
-        </p>
-        <p class="text-sm text-gray-600 dark:text-gray-400">
-          Cela peut prendre quelques instants
-        </p>
-      </div>
-
-      <!-- Résultats et parcours -->
-      <div v-else-if="quizCompleted && analysisResult && showingResults" class="space-y-6">
-        <!-- En-tête des résultats -->
-        <div class="card bg-base-100 shadow-xl">
-          <div class="card-body text-center">
-            <h2 class="card-title text-3xl justify-center mb-4">
-              ✅ Questionnaire terminé !
-            </h2>
-            <div class="flex flex-col items-center gap-4">
-              <div
-                class="radial-progress text-primary"
-                :style="`--value:${analysisResult.evaluation.score_percentage}; --size:8rem; --thickness:8px;`"
-                role="progressbar"
-              >
-                <span class="text-2xl font-bold">{{ Math.round(analysisResult.evaluation.score_percentage) }}%</span>
-              </div>
-              <div class="badge badge-lg" :class="levelInfo.color">
-                {{ levelInfo.text }}
-              </div>
-            </div>
-
-            <!-- Gamification -->
-            <div v-if="analysisResult.gamification" class="mt-4 flex flex-wrap justify-center gap-2">
-              <div class="badge badge-info gap-2">
-                <Icon name="tabler:star-filled" />
-                +{{ analysisResult.gamification.xp_gained }} XP
-              </div>
-              <div v-if="analysisResult.gamification.level_up" class="badge badge-success gap-2">
-                <Icon name="tabler:arrow-up" />
-                Level Up!
-              </div>
-              <div
-                v-for="badge in analysisResult.gamification.badges_earned"
-                :key="badge"
-                class="badge badge-warning gap-2"
-              >
-                <Icon name="tabler:award" />
-                {{ badge }}
+        <div v-else-if="session && session.questions && session.questions.length > 0" class="space-y-6">
+          <div class="card p-4">
+            <div class="flex justify-between items-center">
+              <div>Progress: {{ currentQuestionIndex + 1 }} / {{ session.questions.length }}</div>
+              <div class="badge badge-primary">
+                {{ Object.keys(answers || {}).length }} réponses
               </div>
             </div>
           </div>
-        </div>
 
-        <!-- Parcours d'apprentissage RPG -->
-        <div v-if="analysisResult.parcours_apprentissage" class="card bg-base-100 shadow-xl">
-          <div class="card-body">
-            <h3 class="card-title text-2xl mb-4">
-              🎮 {{ analysisResult.parcours_apprentissage.titre }}
-            </h3>
-            <p class="text-gray-600 dark:text-gray-400 mb-4">
-              ⏱️ Durée estimée : {{ analysisResult.parcours_apprentissage.duree_estimee }}
-            </p>
+          <div class="card bg-base-100 shadow-xl">
+            <div class="card-body">
+              <h2 class="text-xl font-semibold mb-2">
+                {{ session.questions[currentQuestionIndex]?.question }}
+              </h2>
 
-            <!-- Quêtes principales -->
-            <div v-if="analysisResult.parcours_apprentissage.quetes_principales?.length" class="space-y-4">
-              <h4 class="text-xl font-semibold">
-                🎯 Quêtes Principales
-              </h4>
-              <div
-                v-for="quete in analysisResult.parcours_apprentissage.quetes_principales"
-                :key="quete.id"
-                class="card bg-primary/5 border-2 border-primary/20"
-              >
-                <div class="card-body">
-                  <div class="flex justify-between items-start">
-                    <h5 class="card-title text-lg">
-                      {{ quete.titre }}
-                    </h5>
-                    <div class="badge badge-primary">
-                      {{ quete.xp }} XP
-                    </div>
-                  </div>
-                  <p class="text-sm opacity-80">
-                    {{ quete.description }}
-                  </p>
-                  <div v-if="quete.objectifs?.length" class="mt-2">
-                    <p class="text-sm font-semibold mb-1">
-                      Objectifs :
-                    </p>
-                    <ul class="list-disc list-inside text-sm space-y-1">
-                      <li v-for="(obj, idx) in quete.objectifs" :key="idx">
-                        {{ obj }}
-                      </li>
-                    </ul>
-                  </div>
-                  <div v-if="quete.badge" class="mt-2">
-                    <span class="badge badge-outline gap-2">
-                      <Icon name="tabler:award" />
-                      {{ quete.badge }}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Boss Fights -->
-            <div v-if="analysisResult.parcours_apprentissage.boss_fights?.length" class="space-y-4 mt-6">
-              <h4 class="text-xl font-semibold">
-                ⚔️ Boss Fights
-              </h4>
-              <div
-                v-for="boss in analysisResult.parcours_apprentissage.boss_fights"
-                :key="boss.id"
-                class="card bg-error/5 border-2 border-error/20"
-              >
-                <div class="card-body">
-                  <div class="flex justify-between items-start">
-                    <h5 class="card-title text-lg">
-                      {{ boss.titre }}
-                    </h5>
-                    <div class="badge badge-error">
-                      {{ boss.xp }} XP
-                    </div>
-                  </div>
-                  <p class="text-sm opacity-80">
-                    {{ boss.description }}
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Recommandations -->
-        <div v-if="analysisResult.recommendations?.length" class="card bg-base-100 shadow-xl">
-          <div class="card-body">
-            <h3 class="card-title text-xl mb-4">
-              💡 Recommandations
-            </h3>
-            <ul class="space-y-2">
-              <li
-                v-for="(rec, idx) in analysisResult.recommendations"
-                :key="idx"
-                class="flex gap-2"
-              >
-                <Icon name="tabler:check" class="text-success mt-1 flex-shrink-0" />
-                <span>{{ rec }}</span>
-              </li>
-            </ul>
-          </div>
-        </div>
-
-        <!-- Bouton pour aller au dashboard -->
-        <div class="card bg-base-100 shadow-xl">
-          <div class="card-body text-center">
-            <h3 class="text-xl font-semibold mb-4">
-              Prêt à commencer votre aventure ?
-            </h3>
-            <button class="btn btn-primary btn-lg" @click="goToDashboard">
-              <Icon name="tabler:arrow-right" size="24" />
-              Aller au Dashboard
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Questions -->
-      <div v-else-if="session && !quizCompleted" class="space-y-6">
-        <!-- Barre de progression -->
-        <div class="card bg-base-100 shadow-xl">
-          <div class="card-body">
-            <div class="flex justify-between items-center mb-2">
-              <h3 class="text-lg font-semibold">
-                Question {{ currentQuestionIndex + 1 }} / {{ totalQuestions }}
-              </h3>
-              <span class="text-sm text-gray-600 dark:text-gray-400">
-                {{ answeredCount }} / {{ totalQuestions }} réponses
-              </span>
-            </div>
-            <progress
-              class="progress progress-primary"
-              :value="progress"
-              max="100"
-            />
-          </div>
-        </div>
-
-        <!-- Question actuelle -->
-        <div v-if="currentQuestion" class="card bg-base-100 shadow-xl">
-          <div class="card-body">
-            <h2 class="card-title text-2xl mb-6">
-              {{ currentQuestion.question }}
-            </h2>
-
-            <!-- QCM ou Vrai/Faux -->
-            <div v-if="currentQuestion.type === 'ChoixMultiple' || currentQuestion.type === 'VraiOuFaux'" class="space-y-3">
-              <div
-                v-for="option in currentQuestionOptions"
-                :key="option"
-                class="form-control"
-              >
-                <label class="label cursor-pointer justify-start gap-4 p-4 rounded-lg border-2 transition-all" :class="{ 'border-primary bg-primary/5': currentAnswer === option, 'border-base-300 hover:border-primary/50': currentAnswer !== option }">
-                  <input
-                    v-model="currentAnswer"
-                    type="radio"
-                    name="answer"
-                    :value="option"
-                    class="radio radio-primary"
+              <div class="mt-4">
+                <template v-if="session.questions[currentQuestionIndex]?.type === 'ChoixMultiple'">
+                  <div
+                    v-for="(opt, idx) in session.questions[currentQuestionIndex]?.options || []"
+                    :key="idx"
+                    class="my-2"
                   >
-                  <span class="label-text text-base">{{ option }}</span>
-                </label>
+                    <label class="label cursor-pointer p-3 rounded-lg border hover:bg-base-200 flex items-center gap-4">
+                      <input
+                        v-model="answers![getAnswerKey(currentQuestionIndex)]"
+                        :name="ensureRadioName(currentQuestionIndex)"
+                        type="radio"
+                        class="radio radio-primary"
+                        :value="opt"
+                      >
+                      <span>{{ opt }}</span>
+                    </label>
+                  </div>
+                </template>
+
+                <template v-else-if="session.questions[currentQuestionIndex]?.type === 'VraiOuFaux'">
+                  <div class="flex gap-4">
+                    <label class="label cursor-pointer p-3 rounded-lg border hover:bg-base-200 flex items-center gap-4">
+                      <input
+                        v-model="answers![getAnswerKey(currentQuestionIndex)]"
+                        :name="ensureRadioName(currentQuestionIndex)"
+                        type="radio"
+                        class="radio radio-primary"
+                        value="Vrai"
+                      >
+                      <span>Vrai</span>
+                    </label>
+
+                    <label class="label cursor-pointer p-3 rounded-lg border hover:bg-base-200 flex items-center gap-4">
+                      <input
+                        v-model="answers[getAnswerKey(currentQuestionIndex)]"
+                        :name="ensureRadioName(currentQuestionIndex)"
+                        type="radio"
+                        class="radio radio-primary"
+                        value="Faux"
+                      >
+                      <span>Faux</span>
+                    </label>
+                  </div>
+                </template>
+
+                <template v-else>
+                  <textarea v-model="answers[getAnswerKey(currentQuestionIndex)]" class="textarea textarea-bordered h-32 w-full" />
+                </template>
               </div>
-            </div>
-
-            <!-- Question ouverte -->
-            <div v-else-if="currentQuestion.type === 'QuestionOuverte' || currentQuestion.type === 'ListeOuverte'" class="form-control">
-              <textarea
-                v-model="currentAnswer"
-                class="textarea textarea-bordered textarea-lg h-32"
-                :placeholder="currentQuestion.type === 'ListeOuverte' ? 'Séparez vos réponses par des virgules' : 'Écrivez votre réponse ici...'"
-              />
-              <label v-if="currentQuestion.type === 'ListeOuverte'" class="label">
-                <span class="label-text-alt">💡 Conseil: Séparez vos réponses par des virgules</span>
-              </label>
-            </div>
-
-            <!-- Navigation -->
-            <div class="card-actions justify-between mt-6">
-              <button
-                class="btn btn-outline"
-                :disabled="currentQuestionIndex === 0"
-                @click="handlePrevious"
-              >
-                <Icon name="tabler:arrow-left" />
-                Précédent
-              </button>
-
-              <div class="flex gap-2">
-                <button
-                  v-if="currentQuestionIndex < totalQuestions - 1"
-                  class="btn btn-primary"
-                  @click="handleNext"
-                >
-                  Suivant
-                  <Icon name="tabler:arrow-right" />
-                </button>
-
-                <button
-                  v-else
-                  class="btn btn-success"
-                  :disabled="!allQuestionsAnswered || loading"
-                  @click="handleSubmit"
-                >
-                  <Icon v-if="loading" name="svg-spinners:ring-resize" />
-                  <Icon v-else name="tabler:check" />
-                  Terminer
-                </button>
-              </div>
-            </div>
-
-            <!-- Indicateur de réponses -->
-            <div class="flex flex-wrap gap-2 mt-6 pt-6 border-t">
-              <button
-                v-for="(q, idx) in session.questions"
-                :key="idx"
-                class="btn btn-xs btn-circle"
-                :class="{ 'btn-primary': answers[`q_${idx}`], 'btn-outline': !answers[`q_${idx}`], 'btn-active': idx === currentQuestionIndex }"
-                @click="currentQuestionIndex = idx"
-              >
-                {{ idx + 1 }}
-              </button>
             </div>
           </div>
+
+          <div class="flex justify-between items-center">
+            <button
+              class="btn btn-outline"
+              :disabled="currentQuestionIndex === 0"
+              @click="previousQuestion"
+            >
+              Précédent
+            </button>
+            <div class="flex flex-col items-end gap-1">
+              <button
+                v-if="currentQuestionIndex < session.questions.length - 1"
+                class="btn btn-primary"
+                @click="nextQuestion"
+              >
+                Suivant
+              </button>
+              <button
+                v-else
+                class="btn btn-success"
+                :disabled="!allQuestionsAnswered || submitting"
+                @click="handleSubmit"
+              >
+                <span v-if="submitting" class="loading loading-spinner loading-sm" />
+                {{ submitting ? "Envoi en cours..." : "Terminer" }}
+              </button>
+              <p v-if="currentQuestionIndex === session.questions.length - 1 && !allQuestionsAnswered" class="text-xs text-warning">
+                Répondez à au moins 1 question
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div v-else class="card p-6 text-center">
+          <h3 class="text-lg font-medium">
+            Prêt à commencer
+          </h3>
+          <p class="text-sm text-gray-600 my-4">
+            Cliquez pour générer un questionnaire.
+          </p>
+          <button
+            class="btn btn-primary"
+            :disabled="loading"
+            @click="startGeneration"
+          >
+            Commencer
+          </button>
         </div>
       </div>
     </div>

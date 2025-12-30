@@ -101,7 +101,27 @@ export function useQuestionnaireV2() {
       loading.value = true;
       const data = await api.questionnaireV2.generateQuestions();
 
-      session.value = data;
+      // Coerce/validate API response into QuestionnaireSessionV2 shape
+      const questionsFromApi = Array.isArray((data as any)?.questions) ? (data as any).questions : [];
+      const mappedQuestions: QuestionV2[] = questionsFromApi.map((q: any, idx: number) => ({
+        numero: Number(q?.numero ?? idx + 1),
+        question: String(q?.question ?? q?.prompt ?? ""),
+        type: (q?.type as QuestionV2["type"]) || "QuestionOuverte",
+        options: Array.isArray(q?.options) ? q.options.map((o: any) => String(o)) : undefined,
+        correction: q?.correction ?? "",
+      }));
+
+      session.value = {
+        session_id: String((data as any)?.session_id ?? ""),
+        questions: mappedQuestions,
+        profiler_analysis: {
+          niveau_estime: Number((data as any)?.profiler_analysis?.niveau_estime ?? (data as any)?.profiler_analysis?.niveau ?? 1),
+          style_apprentissage: String((data as any)?.profiler_analysis?.style_apprentissage ?? "unknown"),
+          motivation: String((data as any)?.profiler_analysis?.motivation ?? ""),
+        },
+        timestamp: String((data as any)?.timestamp ?? new Date().toISOString()),
+      };
+
       currentQuestionIndex.value = 0;
       answers.value = {};
       quizCompleted.value = false;
@@ -212,14 +232,16 @@ export function useQuestionnaireV2() {
     quizCompleted.value = false;
   };
 
-  // Vérifier si toutes les questions ont une réponse
+  // Vérifier si au moins une question a une réponse (questions optionnelles)
   const allQuestionsAnswered = computed(() => {
     if (!session.value)
       return false;
-    return session.value.questions.every((q) => {
+    // ✅ Au moins une question doit être répondue (pas toutes obligatoires)
+    const answeredQuestions = session.value.questions.filter((q) => {
       const questionKey = `q_${q.numero - 1}`;
       return answers.value[questionKey] && answers.value[questionKey].trim() !== "";
     });
+    return answeredQuestions.length > 0; // Au moins 1 question répondue
   });
 
   return {

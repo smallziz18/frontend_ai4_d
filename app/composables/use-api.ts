@@ -382,5 +382,227 @@ export function useApi() {
         });
       },
     },
+
+    // ============== AI AGENTS ENDPOINTS ==============
+    ai: {
+      // POST /api/ai/v1/agents/start - Démarrer une tâche agent asynchrone
+      startAgentTask: async (agentType: string, params: Record<string, any> = {}) => {
+        return await apiFetch<{
+          task_id: string;
+          status: string;
+          agent_type: string;
+          message: string;
+        }>("/api/ai/v1/agents/start", {
+          method: "POST",
+          body: {
+            agent_type: agentType,
+            params,
+          },
+        });
+      },
+
+      // GET /api/ai/v1/agents/status/{task_id} - Vérifier le statut d'une tâche
+      getAgentTaskStatus: async (taskId: string) => {
+        return await apiFetch<{
+          task_id: string;
+          state: string;
+          status: string;
+          result?: any;
+          error?: string;
+          progress?: number;
+        }>(`/api/ai/v1/agents/status/${taskId}`, {
+          method: "GET",
+        });
+      },
+
+      // POST /api/ai/v1/chat - Chat avec le bot IA
+      chat: async (message: string, sessionId?: string) => {
+        return await apiFetch<{
+          response: string;
+          intention: Record<string, any>;
+          conversation_id: string;
+          timestamp: string;
+          suggestions: string[];
+        }>("/api/ai/v1/chat", {
+          method: "POST",
+          body: {
+            message,
+            session_id: sessionId,
+          },
+        });
+      },
+
+      // GET /api/ai/v1/chat/history - Historique des conversations
+      getChatHistory: async (sessionId?: string, limit: number = 50) => {
+        const params = new URLSearchParams();
+        if (sessionId)
+          params.append("session_id", sessionId);
+        params.append("limit", limit.toString());
+
+        return await apiFetch(`/api/ai/v1/chat/history?${params.toString()}`, {
+          method: "GET",
+        });
+      },
+
+      // POST /api/ai/v1/courses/generate - Générer une roadmap de cours
+      generateCourseRoadmap: async (topic: string, durationWeeks: number = 6) => {
+        return await apiFetch<{
+          message: string;
+          course_id: string;
+          roadmap: any;
+        }>("/api/ai/v1/courses/generate", {
+          method: "POST",
+          body: {
+            topic,
+            duration_weeks: durationWeeks,
+          },
+        });
+      },
+
+      // GET /api/ai/v1/courses/{course_id} - Récupérer un cours
+      getCourse: async (courseId: string) => {
+        return await apiFetch<{
+          course: any;
+          progression: any;
+        }>(`/api/ai/v1/courses/${courseId}`, {
+          method: "GET",
+        });
+      },
+
+      // GET /api/ai/v1/courses - Rechercher des cours
+      searchCourses: async (tags?: string, niveau?: string) => {
+        const params = new URLSearchParams();
+        if (tags)
+          params.append("tags", tags);
+        if (niveau)
+          params.append("niveau", niveau);
+
+        return await apiFetch<{
+          courses: any[];
+        }>(`/api/ai/v1/courses?${params.toString()}`, {
+          method: "GET",
+        });
+      },
+
+      // GET /api/ai/v1/progression - Toutes les progressions
+      getAllProgressions: async () => {
+        return await apiFetch<{
+          progressions: any[];
+        }>("/api/ai/v1/progression", {
+          method: "GET",
+        });
+      },
+
+      // POST /api/ai/v1/progression/{course_id}/module/complete - Compléter un module
+      completeModule: async (courseId: string, moduleId: string, evaluationScore: number, timeSpentMinutes: number) => {
+        return await apiFetch(`/api/ai/v1/progression/${courseId}/module/complete`, {
+          method: "POST",
+          body: {
+            module_id: moduleId,
+            evaluation_score: evaluationScore,
+            time_spent_minutes: timeSpentMinutes,
+          },
+        });
+      },
+
+      // POST /api/ai/v1/progression/{course_id}/lesson/complete - Compléter une leçon
+      completeLesson: async (courseId: string, lessonId: string, timeSpentMinutes: number) => {
+        return await apiFetch<{
+          success: boolean;
+          message: string;
+        }>(`/api/ai/v1/progression/${courseId}/lesson/complete`, {
+          method: "POST",
+          body: {
+            lesson_id: lessonId,
+            time_spent_minutes: timeSpentMinutes,
+          },
+        });
+      },
+
+      // GET /api/ai/v1/learning-path - Parcours d'apprentissage
+      getLearningPath: async () => {
+        return await apiFetch<{
+          learning_path: any;
+        }>("/api/ai/v1/learning-path", {
+          method: "GET",
+        });
+      },
+
+      // POST /api/ai/v1/learning-path/quest/{quest_id}/complete - Compléter une quête
+      completeQuest: async (questId: string, xpEarned: number = 100) => {
+        return await apiFetch<{
+          success: boolean;
+          xp_earned: number;
+          message: string;
+        }>(`/api/ai/v1/learning-path/quest/${questId}/complete?xp_earned=${xpEarned}`, {
+          method: "POST",
+        });
+      },
+
+      // GET /api/ai/v1/resources/recommend - Recommander des ressources
+      recommendResources: async (topic: string, resourceType: string = "all") => {
+        return await apiFetch<{
+          topic: string;
+          user_level: number;
+          resources: any[];
+        }>(`/api/ai/v1/resources/recommend?topic=${encodeURIComponent(topic)}&resource_type=${resourceType}`, {
+          method: "GET",
+        });
+      },
+    },
+
+    // ============== AI REALTIME ENDPOINTS (WebSocket + Streaming) ==============
+    aiRealtime: {
+      // POST /api/ai/v1/realtime/chat/start - Démarrer chat asynchrone
+      startChatAsync: async (message: string, sessionId?: string) => {
+        const params = new URLSearchParams();
+        params.append("message", message);
+        if (sessionId)
+          params.append("session_id", sessionId);
+
+        return await apiFetch<{
+          task_id: string;
+          status: string;
+          session_id: string;
+          estimated_time_seconds: number;
+          poll_url: string;
+          websocket_url: string;
+        }>(`/api/ai/v1/realtime/chat/start?${params.toString()}`, {
+          method: "POST",
+        });
+      },
+
+      // GET /api/ai/v1/realtime/connections - Connexions actives (monitoring)
+      getActiveConnections: async () => {
+        return await apiFetch<{
+          active_connections: number;
+          connections: string[];
+        }>("/api/ai/v1/realtime/connections", {
+          method: "GET",
+        });
+      },
+
+      // POST /api/ai/v1/realtime/broadcast - Broadcast message
+      broadcastMessage: async (message: string) => {
+        return await apiFetch<{
+          message: string;
+          broadcast_to: number;
+        }>(`/api/ai/v1/realtime/broadcast?message=${encodeURIComponent(message)}`, {
+          method: "POST",
+        });
+      },
+
+      // WebSocket connection helper
+      connectWebSocket: (userId: string) => {
+        const wsUrl = `${baseURL.replace("http", "ws")}/api/ai/v1/realtime/chat/${userId}`;
+        return new WebSocket(wsUrl);
+      },
+    },
+
+    // Raw apiFetch pour custom requests
+    apiFetch,
   };
 }
+
+// Type exports pour TypeScript
+export type ApiClient = ReturnType<typeof useApi>;

@@ -2,6 +2,10 @@
 import { useProfile } from "~/composables/use-profile";
 import { useAuth } from "~/data/use-auth";
 
+definePageMeta({
+  layout: "empty",
+});
+
 const { login } = useAuth();
 const { hasProfile } = useProfile();
 const route = useRoute();

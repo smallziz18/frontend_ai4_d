@@ -3,6 +3,10 @@ import { ref } from "vue";
 
 import { useSignup } from "~/composables/use-signup";
 
+definePageMeta({
+  layout: "empty",
+});
+
 const { setBaseData } = useSignup();
 const router = useRouter();
 

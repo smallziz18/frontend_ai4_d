@@ -12,5 +12,6 @@ const showNavBar = computed(() => route.path === "/");
       <slot />
     </main>
     <Footer />
+    <ToastContainer />
   </div>
 </template>

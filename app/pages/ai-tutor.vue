@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useAiAgents } from "~/composables/use-ai-agents";
+import { useAiTutor } from "~/composables/use-ai-tutor";
 import { useAuth } from "~/data/use-auth";
 
 definePageMeta({
@@ -8,27 +8,24 @@ definePageMeta({
 
 const { user } = useAuth();
 const {
-  currentSession,
-  sessionHistory,
+  chatHistory,
   isLoading,
   error,
-  startSession,
   sendMessage,
-  getConversationHistory,
-} = useAiAgents();
+  loadHistory,
+} = useAiTutor();
 
 const messageInput = ref("");
 const chatContainer = ref<HTMLElement | null>(null);
 const isInitializing = ref(false);
+const sessionId = ref<string | null>(null);
 
 // Initialiser la session au montage
 onMounted(async () => {
   isInitializing.value = true;
   try {
-    await startSession();
-    if (currentSession.value) {
-      await getConversationHistory(currentSession.value.session_id);
-    }
+    // Charger l'historique de chat existant
+    await loadHistory();
   }
   catch (e) {
     console.error("Erreur initialisation:", e);
@@ -40,22 +37,18 @@ onMounted(async () => {
 
 // Envoyer un message
 async function handleSendMessage() {
-  if (!messageInput.value.trim() || !currentSession.value)
+  if (!messageInput.value.trim())
     return;
 
   const message = messageInput.value.trim();
   messageInput.value = "";
 
   try {
-    const response = await sendMessage(currentSession.value.session_id, message);
+    const response = await sendMessage(message, sessionId.value || undefined);
 
-    // Ajouter la réponse de l'assistant
-    if (response?.message) {
-      sessionHistory.value.push({
-        role: "assistant",
-        content: response.message,
-        timestamp: new Date().toISOString(),
-      });
+    // Mettre à jour le sessionId si nécessaire
+    if (response?.conversation_id) {
+      sessionId.value = response.conversation_id;
     }
 
     // Scroller en bas
@@ -65,7 +58,7 @@ async function handleSendMessage() {
       }
     });
   }
-  catch (e) {
+  catch (e: any) {
     console.error("Erreur envoi message:", e);
   }
 }
@@ -126,9 +119,8 @@ function handleKeyPress(event: KeyboardEvent) {
         v-if="error"
         type="error"
         :message="error"
-        :dismissible="true"
+        :dismissible="false"
         class="mb-4"
-        @dismiss="error = ''"
       />
 
       <!-- Loading Initial -->
@@ -147,14 +139,14 @@ function handleKeyPress(event: KeyboardEvent) {
             class="overflow-y-auto h-[500px] p-6 space-y-4"
           >
             <!-- Welcome Message -->
-            <div v-if="sessionHistory.length === 0" class="text-center py-12">
+            <div v-if="!chatHistory || chatHistory.length === 0" class="text-center py-12">
               <Icon
                 name="tabler:message-circle-2"
                 size="64"
                 class="mx-auto text-primary opacity-50 mb-4"
               />
               <h3 class="text-xl font-semibold mb-2">
-                Bienvenue, {{ user?.username }} !
+                Bienvenue, {{ user?.username || 'Utilisateur' }} !
               </h3>
               <p class="opacity-70">
                 Je suis votre tuteur AI. Posez-moi n'importe quelle question sur vos cours !
@@ -162,39 +154,41 @@ function handleKeyPress(event: KeyboardEvent) {
             </div>
 
             <!-- Messages History -->
-            <div
-              v-for="(msg, idx) in sessionHistory"
-              :key="idx"
-              class="chat"
-              :class="msg.role === 'user' ? 'chat-end' : 'chat-start'"
-            >
-              <div class="chat-image avatar">
-                <div class="w-10 rounded-full">
-                  <div
-                    class="w-full h-full flex items-center justify-center"
-                    :class="msg.role === 'user' ? 'bg-primary' : 'bg-secondary'"
-                  >
-                    <Icon
-                      :name="msg.role === 'user' ? 'tabler:user' : 'tabler:robot'"
-                      size="24"
-                      class="text-white"
-                    />
+            <template v-if="chatHistory && chatHistory.length > 0">
+              <div
+                v-for="(msg, idx) in chatHistory"
+                :key="idx"
+                class="chat"
+                :class="msg.role === 'user' ? 'chat-end' : 'chat-start'"
+              >
+                <div class="chat-image avatar">
+                  <div class="w-10 rounded-full">
+                    <div
+                      class="w-full h-full flex items-center justify-center"
+                      :class="msg.role === 'user' ? 'bg-primary' : 'bg-secondary'"
+                    >
+                      <Icon
+                        :name="msg.role === 'user' ? 'tabler:user' : 'tabler:robot'"
+                        size="24"
+                        class="text-white"
+                      />
+                    </div>
                   </div>
                 </div>
+                <div class="chat-header mb-1">
+                  {{ msg.role === "user" ? (user?.username || "Vous") : "AI Tutor" }}
+                  <time class="text-xs opacity-50 ml-2">
+                    {{ new Date(msg.timestamp).toLocaleTimeString() }}
+                  </time>
+                </div>
+                <div
+                  class="chat-bubble"
+                  :class="msg.role === 'user' ? 'chat-bubble-primary' : 'chat-bubble-secondary'"
+                >
+                  {{ msg.content }}
+                </div>
               </div>
-              <div class="chat-header mb-1">
-                {{ msg.role === "user" ? user?.username : "AI Tutor" }}
-                <time class="text-xs opacity-50 ml-2">
-                  {{ new Date(msg.timestamp).toLocaleTimeString() }}
-                </time>
-              </div>
-              <div
-                class="chat-bubble"
-                :class="msg.role === 'user' ? 'chat-bubble-primary' : 'chat-bubble-secondary'"
-              >
-                {{ msg.content }}
-              </div>
-            </div>
+            </template>
 
             <!-- Loading indicator -->
             <div v-if="isLoading" class="chat chat-start">
@@ -221,12 +215,12 @@ function handleKeyPress(event: KeyboardEvent) {
                 placeholder="Tapez votre message..."
                 class="textarea textarea-bordered flex-1 resize-none"
                 rows="2"
-                :disabled="isLoading || !currentSession"
+                :disabled="isLoading"
                 @keypress="handleKeyPress"
               />
               <button
                 class="btn btn-primary btn-square"
-                :disabled="!messageInput.trim() || isLoading || !currentSession"
+                :disabled="!messageInput.trim() || isLoading"
                 @click="handleSendMessage"
               >
                 <Icon name="tabler:send" size="24" />

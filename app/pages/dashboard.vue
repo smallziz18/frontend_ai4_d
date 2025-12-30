@@ -8,11 +8,12 @@ definePageMeta({
 
 const { user, logout, loadUserFromCookie } = useAuth();
 const { profile, profileLoading, fetchProfile, fetchRecommendations, hasProfile } = useProfile();
-const router = useRouter();
 
 // État local
 const error = ref("");
 const showBadges = ref(false);
+const blockedMessage = ref("");
+const route = useRoute();
 
 // Computed
 const userLevel = computed(() => {
@@ -53,39 +54,39 @@ onMounted(async () => {
 
   await loadUserFromCookie();
 
-  // Vérifier le flag de redirection pour éviter les boucles infinies
+  // ✅ Vérifier si on vient du questionnaire bloqué
+  if (route.query.from === "questionnaire_blocked") {
+    blockedMessage.value = "✅ Vous avez déjà complété le questionnaire ! Votre profil est prêt.";
+    // Effacer le paramètre query de l'URL
+    await navigateTo("/dashboard", { replace: true });
+  }
+
+  // ✅ Vérifier si on vient juste de compléter le questionnaire
   const fromQuestionnaire = sessionStorage.getItem("from_questionnaire");
+  if (fromQuestionnaire) {
+    sessionStorage.removeItem("from_questionnaire");
+    blockedMessage.value = "🎉 Félicitations ! Votre profil a été créé avec succès !";
+    // Attendre un peu pour laisser le backend créer le profil
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  }
 
   // Vérifier si l'utilisateur a un profil
   const profileExists = await hasProfile();
 
-  if (!profileExists && !fromQuestionnaire) {
-    // Nouvel utilisateur sans profil -> rediriger vers questionnaire
-    // Marquer qu'on vient du dashboard pour éviter la boucle
-    sessionStorage.setItem("redirected_to_questionnaire", "true");
-    await navigateTo("/questionnaire-v2");
+  if (!profileExists) {
+    // Pas de profil -> rediriger vers questionnaire
+    await navigateTo("/questionnaire");
     return;
   }
 
-  if (!profileExists && fromQuestionnaire) {
-    // Si on revient du questionnaire mais pas de profil, c'est une erreur
-    error.value = "Erreur : Le profil n'a pas été créé correctement. Veuillez contacter le support.";
-    sessionStorage.removeItem("from_questionnaire");
-    return;
-  }
-
-  // Nettoyer le flag
-  sessionStorage.removeItem("from_questionnaire");
-  sessionStorage.removeItem("redirected_to_questionnaire");
-
-  // Utilisateur existant -> charger le profil
+  // Profil existe, charger les données
   try {
     await fetchProfile();
     await fetchRecommendations();
   }
   catch (e: any) {
     error.value = "Erreur lors du chargement du profil";
-    console.error(e);
+    console.error("Dashboard error:", e);
   }
 });
 
@@ -94,9 +95,7 @@ async function handleLogout() {
   await navigateTo("/login");
 }
 
-function goToQuestionnaire() {
-  router.push("/questionnaire-v2");
-}
+// ✅ Fonction supprimée - le questionnaire ne peut être fait qu'une seule fois
 </script>
 
 <template>
@@ -150,6 +149,17 @@ function goToQuestionnaire() {
         :dismissible="true"
         @dismiss="error = ''"
       />
+    </div>
+
+    <!-- Message de blocage du questionnaire / succès de création -->
+    <div v-if="blockedMessage" class="container mx-auto px-4 py-4">
+      <div class="alert alert-success shadow-lg">
+        <Icon name="tabler:check-circle" size="24" />
+        <span>{{ blockedMessage }}</span>
+        <button class="btn btn-sm btn-ghost" @click="blockedMessage = ''">
+          <Icon name="tabler:x" size="16" />
+        </button>
+      </div>
     </div>
 
     <!-- Dashboard Content -->
@@ -370,10 +380,6 @@ function goToQuestionnaire() {
               <Icon name="tabler:user" size="24" />
               Mon Profil
             </NuxtLink>
-            <button class="btn btn-outline btn-lg" @click="goToQuestionnaire">
-              <Icon name="tabler:clipboard-check" size="24" />
-              Refaire le Questionnaire
-            </button>
             <button class="btn btn-outline btn-lg">
               <Icon name="tabler:settings" size="24" />
               Paramètres
@@ -383,7 +389,7 @@ function goToQuestionnaire() {
       </div>
     </div>
 
-    <!-- Fallback si pas de profil -->
+    <!-- Fallback si pas de profil (ne devrait jamais s'afficher car redirigé automatiquement) -->
     <div v-else class="container mx-auto px-4 py-16 text-center">
       <Icon
         name="tabler:alert-circle"
@@ -391,15 +397,12 @@ function goToQuestionnaire() {
         class="mx-auto text-warning mb-4"
       />
       <h2 class="text-2xl font-bold mb-4">
-        Aucun profil trouvé
+        Redirection en cours...
       </h2>
       <p class="mb-6">
-        Vous devez d'abord compléter le questionnaire pour créer votre profil.
+        Vous allez être redirigé vers le questionnaire de profilage.
       </p>
-      <button class="btn btn-primary btn-lg" @click="goToQuestionnaire">
-        <Icon name="tabler:arrow-right" size="24" />
-        Commencer le Questionnaire
-      </button>
+      <div class="loading loading-dots loading-lg" />
     </div>
   </div>
 </template>
