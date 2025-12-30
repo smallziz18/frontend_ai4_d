@@ -1,17 +1,24 @@
 // Composable pour gérer le thème (dark/light)
 export function useTheme() {
+  const isProd = import.meta.env.PROD;
+  const themeCookie = useCookie<"light" | "dark">("theme", {
+    sameSite: "lax",
+    path: "/",
+    maxAge: 60 * 60 * 24 * 365, // 1 an
+    secure: isProd,
+  });
   // State du thème (sauvegardé dans localStorage)
   const theme = useState<"light" | "dark">("theme", () => {
-    // Vérifier le localStorage au chargement
     if (import.meta.client) {
-      const saved = localStorage.getItem("theme");
+      const savedLocal = localStorage.getItem("theme");
+      const savedCookie = themeCookie.value;
+      const saved = (savedLocal as "light" | "dark") || savedCookie || undefined;
       if (saved === "light" || saved === "dark") {
         return saved;
       }
-      // Par défaut, utiliser la préférence système
       return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
     }
-    return "dark"; // Défaut server-side
+    return themeCookie.value || "dark";
   });
 
   // Appliquer le thème au document
@@ -26,9 +33,9 @@ export function useTheme() {
         html.classList.remove("dark");
         html.setAttribute("data-theme", "light");
       }
-      // Sauvegarder dans localStorage
       localStorage.setItem("theme", newTheme);
     }
+    themeCookie.value = newTheme;
   };
 
   // Changer le thème

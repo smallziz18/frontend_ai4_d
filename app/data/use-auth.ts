@@ -1,3 +1,5 @@
+import { useApi } from "~/composables/use-api";
+
 export type User = {
   id: string;
   username: string;
@@ -6,22 +8,30 @@ export type User = {
 
 export function useAuth() {
   const api = useApi();
+  const isProd = import.meta.env.PROD;
   const user = useState<User | null>("user", () => null);
+  const cookieSecurity = {
+    secure: isProd,
+    sameSite: "lax" as const,
+    path: "/",
+  };
   const accessToken = useCookie("access_token", {
     maxAge: 60 * 60 * 24 * 7, // 7 jours
-    secure: false,
-    sameSite: "lax",
+    ...cookieSecurity,
   });
   const refreshToken = useCookie("refresh_token", {
     maxAge: 60 * 60 * 24 * 30, // 30 jours
-    secure: false,
-    sameSite: "lax",
+    ...cookieSecurity,
   });
   const userCookie = useCookie("user_data", {
     maxAge: 60 * 60 * 24 * 7,
-    secure: false,
-    sameSite: "lax",
+    ...cookieSecurity,
   });
+
+  const setUser = (value: User | null) => {
+    user.value = value;
+    userCookie.value = value ? JSON.stringify(value) : null;
+  };
 
   const isAuthenticated = () => {
     return !!accessToken.value;
@@ -34,8 +44,7 @@ export function useAuth() {
       if (data) {
         accessToken.value = data.access_token;
         refreshToken.value = data.refresh_token;
-        userCookie.value = JSON.stringify(data.user);
-        user.value = data.user;
+        setUser(data.user);
       }
 
       return user.value;
@@ -57,18 +66,21 @@ export function useAuth() {
     finally {
       accessToken.value = null;
       refreshToken.value = null;
-      userCookie.value = null;
-      user.value = null;
+      setUser(null);
     }
   };
 
   const loadUserFromCookie = () => {
-    if (userCookie.value && !user.value) {
+    if (user.value)
+      return;
+    if (userCookie.value) {
       try {
-        user.value = JSON.parse(userCookie.value as string);
+        const parsed = typeof userCookie.value === "string" ? JSON.parse(userCookie.value) : userCookie.value;
+        setUser(parsed as User);
       }
       catch (e) {
         console.error("Erreur lors du chargement de l'utilisateur:", e);
+        setUser(null);
       }
     }
   };
@@ -79,5 +91,8 @@ export function useAuth() {
     login,
     logout,
     loadUserFromCookie,
+    setUser,
+    accessToken,
+    refreshToken,
   };
 }

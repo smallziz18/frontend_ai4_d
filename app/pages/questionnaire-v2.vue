@@ -66,14 +66,24 @@ async function handleSubmit() {
     await submitResponses();
 
     // ✅ Invalider le cache pour forcer la vérification du profil
-    const { invalidateHasProfileCache } = await import("~/composables/use-profile");
+    const { invalidateHasProfileCache, hasProfile } = await import("~/composables/use-profile");
     invalidateHasProfileCache();
 
     // Marquer qu'on vient du questionnaire
     sessionStorage.setItem("from_questionnaire", "true");
 
+    // Attendre un court délai pour laisser le backend persister le profil
+    await new Promise(resolve => setTimeout(resolve, 1200));
+
+    // Vérifier que le profil est bien créé avant de rediriger
+    const created = await hasProfile();
+    if (!created) {
+      pageError.value = "Profil en cours de création, réessayez dans un instant.";
+      return;
+    }
+
     // Rediriger vers le dashboard
-    await router.push("/dashboard");
+    await router.replace("/dashboard");
   }
   catch (e: any) {
     console.error("Erreur lors de l'envoi:", e);

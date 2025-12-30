@@ -1,4 +1,7 @@
+import { useAuth } from "~/data/use-auth";
+
 export default defineNuxtRouteMiddleware(async () => {
+  const { loadUserFromCookie } = useAuth();
   const accessToken = useCookie("access_token");
 
   // Vérifier si l'utilisateur est authentifié
@@ -7,6 +10,6 @@ export default defineNuxtRouteMiddleware(async () => {
     return navigateTo("/login");
   }
 
-  // Note: La vérification du profil se fera dans les pages elles-mêmes
-  // pour éviter des appels API inutiles dans le middleware
+  // Restaure le user en mémoire si les cookies sont présents
+  loadUserFromCookie();
 });
